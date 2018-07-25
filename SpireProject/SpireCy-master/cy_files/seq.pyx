@@ -58,11 +58,14 @@ def call_c_ICFL_cfl(str, c):
         free(factorization_c)
     return factorization
 
-def compute_fingerprint_by_fasta(name_file):
+def compute_fingerprint_by_fasta(name_file, second_format):
   print("Compute fingerprint...")
   max_length_fact = 0
   factorization_file = open(name_file)
-  fingerprint_file = open(name_file.replace("results", "fingerprint"), "w")
+  if (second_format):
+    fingerprint_file = open(name_file.replace("results", "fingerprint_second_format"), "w")
+  else:
+    fingerprint_file = open(name_file.replace("results", "fingerprint"), "w")
   txt_fingerprint = ""
   id_read = ''
   s = ' '
@@ -83,8 +86,10 @@ def compute_fingerprint_by_fasta(name_file):
         s = s.replace("[", "")
         s = s.replace("]", "")
         list_fact = s.split()
-
-      txt_fingerprint = txt_fingerprint + str(id_read) + " $ "
+      if (second_format):
+        txt_fingerprint = txt_fingerprint + str(id_read) + " $ "
+      else:
+        txt_fingerprint = txt_fingerprint + str(id_read) + " "
 
       for i in range(len(list_fact)):
 
@@ -104,12 +109,25 @@ def compute_fingerprint_by_fasta(name_file):
 
       txt_fingerprint = txt_fingerprint.replace("<<", "0")
       txt_fingerprint = txt_fingerprint.replace(">>", "-1")
-      fingerprint_file.write(txt_fingerprint + " $ " + s)
+      if (second_format):
+        fingerprint_file.write(txt_fingerprint + " $ " + s)
+      else:
+        fingerprint_file.write(txt_fingerprint)
       txt_fingerprint = ""
 
   fingerprint_file.close()
   factorization_file.close()
   return max_length_fact
+
+def check_and_execute_factorization(choice, read, c):
+  if (choice == 1):
+    return call_c_CFL(read)
+  elif (choice == 2):
+    return call_c_ICFL(str)
+  elif (choice == 3):
+    return call_c_CFL_icfl(read, c)
+  elif (choice == 4):
+    return call_c_ICFL_cfl(read, c)
 
 
 #Settaggio dei parametri
@@ -120,10 +138,11 @@ C = input('Prego, fornisca la dimensione massima di ciascun fattore\n')
 
 dir_path_experiment = input("Fornisca il percorso della cartella dei file Fasta (tra apici \")\n")
 
+fact_choice = input("Indichi quale funzione di fattorizzazione adottare:\n1.CFL\n2.ICFL\n3.CFL con sottofattorizzazioni ICFL\n4.ICFL con sottofattorizzazzioni CFL\n")
+
 #Inizio del processamento dei file
 
 #import main_fingerprint
-print("works until now\n")
 list_runs = os.listdir(dir_path_experiment)
 
 for run in list_runs:
@@ -162,7 +181,8 @@ for run in list_runs:
                 part = fasta.readline().rstrip()
                 if part == "":
                     #fact = call_c_CFL(read)
-                    fact = call_c_CFL_icfl(read, C)
+                    fact = check_and_execute_factorization(fact_choice, read, C)
+                    #fact = call_c_CFL_icfl(read, C)
                     #fact = apply_factorization(read, C, call_c_CFL_icfl)
                     results.write(str(fact))
                     last_block_size = 10
@@ -170,7 +190,8 @@ for run in list_runs:
                 elif part[0] == '>':
                     #part(id) su file e fact su file
                     #fact = call_c_CFL(read)
-                    fact = call_c_CFL_icfl(read, C)
+                    fact = check_and_execute_factorization(fact_choice, read, C)
+                    #fact = call_c_CFL_icfl(read, C)
                     #fact = apply_factorization(read, C, call_c_CFL_icfl)
                     results.write(str(fact) + '\n' + str(part) + '\n')
                     first = True
@@ -185,7 +206,11 @@ for run in list_runs:
     list_fasta = os.listdir(run_path)
     list_fasta = [file for file in list_fasta if file.startswith('results')]
 
-    compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0])
+    if (fact_choice == 3 or fact_choice == 4):
+      compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], False)
+      compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], True)
+    else:
+      compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], False)
 
     #list_fasta = os.listdir(run_path)
     #list_fasta = [file for file in list_fasta if file.startswith('fingerprint')]
