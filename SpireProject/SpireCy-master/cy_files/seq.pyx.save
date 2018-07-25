@@ -1,0 +1,128 @@
+
+
+import datetime, os
+
+cimport client_lib
+from libc.stdlib cimport free
+
+cdef client_lib.node_t * cfl_list
+
+def call_c_CFL(str):
+    cdef char *factorization_c
+    cfl_list = client_lib.CFL(str)
+    #client_lib.print_list_reverse(cfl_list)
+    factorization_c = client_lib.list_to_string(cfl_list, 0)
+    #free fact created by malloc in c function (other free need import module level from cpython.mem cimport PyMem_Free)
+    try:
+        factorization = <bytes> factorization_c
+    finally:
+        free(factorization_c)
+    return factorization
+
+
+def call_c_CFL_icfl(str, c):
+    cdef char *factorization_c
+    cfl_list = client_lib.CFL_icfl(str, c)
+    #client_lib.print_list_reverse(cfl_list)
+    factorization_c = client_lib.list_to_string(cfl_list, 0)
+    #free fact created by malloc in c function (other free need import module level from cpython.mem cimport PyMem_Free)
+    try:
+        factorization = <bytes> factorization_c
+    finally:
+        free(factorization_c)
+    return factorization
+
+
+def call_c_ICFL(str):
+    cdef char *factorization_c
+    cfl_list = client_lib.ICFL_recursive(str)
+    #client_lib.print_list_reverse(cfl_list)
+    factorization_c = client_lib.list_to_string(cfl_list, 1)
+    #free fact created by malloc in c function (other free need import module level from cpython.mem cimport PyMem_Free)
+    try:
+        factorization = <bytes> factorization_c
+    finally:
+        free(factorization_c)
+    return factorization
+
+
+def call_c_ICFL_cfl(str, c):
+    cdef char *factorization_c
+    cfl_list = client_lib.ICFL_cfl(str, c)
+    #client_lib.print_list_reverse(cfl_list)
+    factorization_c = client_lib.list_to_string(cfl_list, 1)
+    #free fact created by malloc in c function (other free need import module level from cpython.mem cimport PyMem_Free)
+    try:
+        factorization = <bytes> factorization_c
+    finally:
+        free(factorization_c)
+    return factorization
+
+#Settaggio dei parametri
+
+print('Benvenuto nel programma Spire sequenziale\n')
+
+C = input('Prego, fornisca la dimensione massima di ciascun fattore\n')
+
+BLOCK_SIZE = input("Fornisca la dimensione del blocco\n")
+
+dir_path_experiment = input("Fornisca il percorso della cartella dei file Fasta (tra apici \")\n")
+
+#Inizio del processamento dei file
+
+list_runs = os.listdir(dir_path_experiment)
+
+for run in list_runs:
+    run_path = dir_path_experiment + "/" + run
+    list_fasta = os.listdir(run_path)
+    list_fasta = [file for file in list_fasta if file.endswith('.fasta')]
+
+    if len(list_fasta) == 0:#or len(list_fasta) > 1:
+        print("La directory deve contenere un file .fasta")
+        continue
+
+    fasta = open(run_path + "/" + list_fasta[0], 'r')
+    pos = fasta.tell()  # check file
+    row = fasta.readline()
+    if row == "" or row[0] != '>':
+        print("Errore file fasta")
+    fasta.seek(pos)
+
+    filename = '/results_' + run + '.txt'
+    mode = 'w' # make a new file if not
+    results = open(run_path + filename, mode)
+
+    first = True
+    last_block_size = -1
+    part = ' '  #
+    while True:
+        if part == ' ':  #first time#
+            results.write(fasta.readline().rstrip() + '\n')  #primo id su file
+	#check read and id
+        part = ' '
+        while part[0] != '>':  # o last_block_size cambiato
+            if first:
+                read = fasta.readline().rstrip()
+                first = False
+            else:
+                part = fasta.readline().rstrip()
+                if part == "":
+                    fact = call_c_CFL(read)
+                    results.write(str(fact))
+                    last_block_size = 10
+                    break
+                elif part[0] == '>':
+                    #part(id) su file e fact su file
+                    fact = call_c_CFL(read)
+                    results.write(str(fact) + '\n' + str(part) + '\n')
+                    first = True
+                else:
+                    read += part.rstrip()
+
+        if last_block_size != -1:  # end for
+            break
+    results.close()
+    fasta.close()
+    print(run + ' processato')
+    print('Tutti i file sono stati processati')
+    input() #Per non causare la chiusura immediata della console
