@@ -63,9 +63,8 @@ def compute_fingerprint_by_fasta(name_file, second_format):
   max_length_fact = 0
   factorization_file = open(name_file)
   if (second_format):
-    fingerprint_file = open(name_file.replace("results", "fingerprint_second_format"), "w")
-  else:
-    fingerprint_file = open(name_file.replace("results", "fingerprint"), "w")
+    fingerprint_second_file = open(name_file.replace("results", "fingerprint_second_format"), "w")
+  fingerprint_file = open(name_file.replace("results", "fingerprint"), "w")
   txt_fingerprint = ""
   id_read = ''
   s = ' '
@@ -86,10 +85,11 @@ def compute_fingerprint_by_fasta(name_file, second_format):
         s = s.replace("[", "")
         s = s.replace("]", "")
         list_fact = s.split()
+      print ("step1")
+      second_txt_fingerprint = ""
       if (second_format):
-        txt_fingerprint = txt_fingerprint + str(id_read) + " $ "
-      else:
-        txt_fingerprint = txt_fingerprint + str(id_read) + " "
+        second_txt_fingerprint = second_txt_fingerprint + str(id_read) + " $ "
+      txt_fingerprint = txt_fingerprint + str(id_read) + " "
 
       for i in range(len(list_fact)):
 
@@ -109,10 +109,10 @@ def compute_fingerprint_by_fasta(name_file, second_format):
 
       txt_fingerprint = txt_fingerprint.replace("<<", "0")
       txt_fingerprint = txt_fingerprint.replace(">>", "-1")
+      print ("step2")
       if (second_format):
-        fingerprint_file.write(txt_fingerprint + " $ " + s)
-      else:
-        fingerprint_file.write(txt_fingerprint)
+        fingerprint_second_file.write(second_txt_fingerprint + " $ " + s)
+      fingerprint_file.write(txt_fingerprint)
       txt_fingerprint = ""
 
   fingerprint_file.close()
@@ -207,7 +207,7 @@ for run in list_runs:
     list_fasta = [file for file in list_fasta if file.startswith('results')]
 
     if (fact_choice == 3 or fact_choice == 4):
-      compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], False)
+      #compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], False)
       compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], True)
     else:
       compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], False)
