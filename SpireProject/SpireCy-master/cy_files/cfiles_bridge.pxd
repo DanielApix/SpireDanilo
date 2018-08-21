@@ -11,9 +11,6 @@ cdef extern from "../c_files/utils.h":
 
     char *list_to_string(node_t *list, int reverse)
 
-    void print_statistics()
-
-    void communicate_max_fact_length(int c)
 
 cdef extern from "../c_files/factorizations.h":
 

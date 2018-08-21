@@ -98,8 +98,16 @@ char *substring(char word[], int x, int y) {
 }
 
 
+int number_of_reads = 0, number_of_factors = 0, factors_length_sum = 0, max_factor_length = 0;
+int number_of_longer_factors = 0, max_fact_len = 0;
+
+void communicate_max_fact_length(int c) {
+    max_fact_len = c;
+}
+
 char *list_to_string(node_t *list, int reverse) { //0 true 1 false
 
+    number_of_reads++;
     node_t *current = list;
     if (reverse == 0) {
         node_t *prev = NULL;
@@ -139,6 +147,18 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
             length += 1;
         }
         length += (strlen(current->factor) + 2);
+        if (strcmp(current->factor, "<<") && strcmp(current->factor, ">>")) {
+            number_of_factors++;
+            int factor_length = strlen(current->factor);
+            factors_length_sum += factor_length;
+            if (factor_length > max_factor_length) {
+              max_factor_length = factor_length;
+            }
+            if (factor_length > max_fact_len) {
+              number_of_longer_factors++;
+            }
+            
+        }
         current = current->next;
     }
 
@@ -156,6 +176,13 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
 
     free_list(list_t);
     return to_string;
+}
+
+void print_statistics() {
+  printf("Numero medio di fattori per read: %d\n", number_of_factors/number_of_reads);
+  printf("Lunghezza media dei fattori: %d\n", factors_length_sum/number_of_factors);
+  printf("Lunghezza massima fattori: %d\n", max_factor_length);
+  printf("Numero di fattori che superano la lunghezza massima: %d\n", number_of_longer_factors);
 }
 
 
