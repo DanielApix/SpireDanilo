@@ -15,6 +15,8 @@ cdef extern from "../c_files/utils.h":
 
     void communicate_max_fact_length(int c)
 
+    void set_number_of_elements(int num)
+
 cdef extern from "../c_files/factorizations.h":
 
     int index_in_alphabet(char t, char typ_alphabet_list[])
@@ -26,3 +28,5 @@ cdef extern from "../c_files/factorizations.h":
     node_t *ICFL_recursive(char word[]);
 
     node_t *ICFL_cfl(char word[], int C);
+
+    int get_number_of_factors()

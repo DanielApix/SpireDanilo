@@ -8,12 +8,17 @@ from libc.stdlib cimport free
 
 cdef client_lib.node_t * cfl_list
 
+def communicate_list_length():
+    num = client_lib.get_number_of_factors()
+    client_lib.set_number_of_elements(num)
+
 def call_c_CFL(str):
     cdef char *factorization_c
     cfl_list = client_lib.CFL(str)
     #client_lib.print_list_reverse(cfl_list)
     factorization_c = client_lib.list_to_string(cfl_list, 0)
     #free fact created by malloc in c function (other free need import module level from cpython.mem cimport PyMem_Free)
+    communicate_list_length()
     try:
         factorization = <bytes> factorization_c
     finally:
@@ -27,6 +32,7 @@ def call_c_CFL_icfl(str, c):
     #client_lib.print_list_reverse(cfl_list)
     factorization_c = client_lib.list_to_string(cfl_list, 0)
     #free fact created by malloc in c function (other free need import module level from cpython.mem cimport PyMem_Free)
+    communicate_list_length()
     try:
         factorization = <bytes> factorization_c
     finally:
@@ -40,6 +46,7 @@ def call_c_ICFL(str):
     #client_lib.print_list_reverse(cfl_list)
     factorization_c = client_lib.list_to_string(cfl_list, 1)
     #free fact created by malloc in c function (other free need import module level from cpython.mem cimport PyMem_Free)
+    communicate_list_length()
     try:
         factorization = <bytes> factorization_c
     finally:
@@ -53,6 +60,7 @@ def call_c_ICFL_cfl(str, c):
     #client_lib.print_list_reverse(cfl_list)
     factorization_c = client_lib.list_to_string(cfl_list, 1)
     #free fact created by malloc in c function (other free need import module level from cpython.mem cimport PyMem_Free)
+    communicate_list_length()
     try:
         factorization = <bytes> factorization_c
     finally:
@@ -122,7 +130,7 @@ def check_and_execute_factorization(choice, read, c):
   if (choice == 1):
     return call_c_CFL(read)
   elif (choice == 2):
-    return call_c_ICFL(str)
+    return call_c_ICFL(read)
   elif (choice == 3):
     return call_c_CFL_icfl(read, c)
   elif (choice == 4):
@@ -214,69 +222,71 @@ for run in list_runs:
     if len(list_fasta) == 0:#or len(list_fasta) > 1:
         print("La directory deve contenere un file .fasta")
         continue
+    for fasta_name in list_fasta:
+      fasta = open(run_path + "/" + fasta_name, 'r')
+      pos = fasta.tell()  # check file
+      row = fasta.readline()
+      if row == "" or row[0] != '>':
+          print("Errore file fasta")
+      fasta.seek(pos)
 
-    fasta = open(run_path + "/" + list_fasta[0], 'r')
-    pos = fasta.tell()  # check file
-    row = fasta.readline()
-    if row == "" or row[0] != '>':
-        print("Errore file fasta")
-    fasta.seek(pos)
+      filename = '/results_' + fasta_name + '.txt'
+      mode = 'w' # make a new file if not
+      results = open(run_path + filename, mode)
 
-    filename = '/results_' + run + '.txt'
-    mode = 'w' # make a new file if not
-    results = open(run_path + filename, mode)
+      first = True
+      last_block_size = -1
+      part = ' '  #
+      while True:
+          if part == ' ':  #first time#
+              results.write(fasta.readline().rstrip() + '\n')  #primo id su file
+	  #check read and id
+          part = ' '
+          while part[0] != '>':  # o last_block_size cambiato
+              if first:
+                  read = fasta.readline().rstrip()
+                  first = False
+              else:
+                  part = fasta.readline().rstrip()
+                  if part == "":
+                      #fact = call_c_CFL(read)
+                      fact = check_and_execute_factorization(fact_choice, read, C)
+                      #fact = call_c_CFL_icfl(read, C)
+                      #fact = apply_factorization(read, C, call_c_CFL_icfl)
+                      results.write(str(fact))
+                      last_block_size = 10
+                      break
+                  elif part[0] == '>':
+                      #part(id) su file e fact su file
+                      #fact = call_c_CFL(read)
+                      fact = check_and_execute_factorization(fact_choice, read, C)
+                      #fact = call_c_CFL_icfl(read, C)
+                      #fact = apply_factorization(read, C, call_c_CFL_icfl)
+                      results.write(str(fact) + '\n' + str(part) + '\n')
+                      first = True
+                  else:
+                      read += part.rstrip()
 
-    first = True
-    last_block_size = -1
-    part = ' '  #
-    while True:
-        if part == ' ':  #first time#
-            results.write(fasta.readline().rstrip() + '\n')  #primo id su file
-	#check read and id
-        part = ' '
-        while part[0] != '>':  # o last_block_size cambiato
-            if first:
-                read = fasta.readline().rstrip()
-                first = False
-            else:
-                part = fasta.readline().rstrip()
-                if part == "":
-                    #fact = call_c_CFL(read)
-                    fact = check_and_execute_factorization(fact_choice, read, C)
-                    #fact = call_c_CFL_icfl(read, C)
-                    #fact = apply_factorization(read, C, call_c_CFL_icfl)
-                    results.write(str(fact))
-                    last_block_size = 10
-                    break
-                elif part[0] == '>':
-                    #part(id) su file e fact su file
-                    #fact = call_c_CFL(read)
-                    fact = check_and_execute_factorization(fact_choice, read, C)
-                    #fact = call_c_CFL_icfl(read, C)
-                    #fact = apply_factorization(read, C, call_c_CFL_icfl)
-                    results.write(str(fact) + '\n' + str(part) + '\n')
-                    first = True
-                else:
-                    read += part.rstrip()
-
-        if last_block_size != -1:  # end for
-            break
-    results.close()
-    fasta.close()
+          if last_block_size != -1:  # end for
+              break
+      results.close()
+      fasta.close()
 
     list_fasta = os.listdir(run_path)
     list_fasta = [file for file in list_fasta if file.startswith('results')]
 
-    if (fact_choice == 3 or fact_choice == 4):
-      #compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], False)
-      compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], True)
-    else:
-      compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], False)
+    for fasta_name in list_fasta:
+      if (fact_choice == 3 or fact_choice == 4):
+        compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + fasta_name, False)
+        compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + fasta_name, True)
+      else:
+        compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + fasta_name, False)
 
-#    list_fasta = os.listdir(run_path)
-#    list_fasta = [file for file in list_fasta if file.startswith('fingerprint_')]
+    list_fasta = os.listdir(run_path)
+    list_fasta = [file for file in list_fasta if file.startswith('fingerprint_')]
 
-#    kfingerprint(dir_path_experiment + "/" + run + "/" + list_fasta[0], k)
+    for fasta_name in list_fasta:
+      kfingerprint(dir_path_experiment + "/" + run + "/" + fasta_name, k)
 
 
     print(run + ' processato')

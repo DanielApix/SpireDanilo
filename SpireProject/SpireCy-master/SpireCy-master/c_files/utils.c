@@ -97,6 +97,12 @@ char *substring(char word[], int x, int y) {
 	return sub;
 }
 
+int number_of_elements = 0;
+
+void set_number_of_elements(int num) {
+  number_of_elements = num;
+}
+
 
 int number_of_reads = 0, number_of_factors = 0, factors_length_sum = 0, max_factor_length = 0;
 int number_of_longer_factors = 0, max_fact_len = 0;
@@ -106,7 +112,6 @@ void communicate_max_fact_length(int c) {
 }
 
 char *list_to_string(node_t *list, int reverse) { //0 true 1 false
-
     number_of_reads++;
     node_t *current = list;
     if (reverse == 0) {
