@@ -97,9 +97,38 @@ char *substring(char word[], int x, int y) {
 	return sub;
 }
 
+/*Handles the case in which dest has not enough space and concatenates*/
+char *concatenate(char *dest, char *src) {
+  int destlen = strlen(dest);
+  int resultingspace = destlen + strlen(src) + 1;
+  if (destlen > resultingspace) {
+    realloc(dest, resultingspace);
+  }
+  strcat(dest, src);
+  return dest;
+}
+
+int number_of_elements = 0;
+
+void set_number_of_elements(int num) {
+  number_of_elements = num;
+}
+
+int read_dimension = 0;
+
+void set_read_dimension(int value) {
+ read_dimension = value;
+}
+
+int number_of_reads = 0, number_of_factors = 0, factors_length_sum = 0, max_factor_length = 0;
+int number_of_longer_factors = 0, max_fact_len = 0;
+
+void communicate_max_fact_length(int c) {
+    max_fact_len = c;
+}
 
 char *list_to_string(node_t *list, int reverse) { //0 true 1 false
-
+    number_of_reads++;
     node_t *current = list;
     if (reverse == 0) {
         node_t *prev = NULL;
@@ -115,7 +144,9 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
 
     int allocated = 400;
     char *to_string = malloc(allocated);
-    strcpy(to_string, "[ ");
+    char *fingerprint = malloc(allocated);
+    strcpy(fingerprint, "");
+    strcpy(to_string, "");
 
     int length = 5; //memory for [  ]\0
     node_t *list_t = current;
@@ -130,9 +161,22 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
             }
             //to_string = realloc(to_string, allocated);
         }
-        strcat(to_string, "\"");
+        char value[12];
+        sprintf(value, "%d", strlen(current->factor));
+        if (strcmp(current->factor, "<<") != 0 && strcmp(current->factor, ">>") != 0) {
+          number_of_factors++;
+          concatenate(fingerprint, &value);
+          
+          char *elm = ",";
+          concatenate(fingerprint, elm);
+        } 
+        else {
+          char *elm = (strcmp(current->factor, "<<") != 0) ? "0," : "-1,";
+          concatenate(fingerprint, elm);
+        }
+        strcat(to_string, "");
         strcat(to_string, current->factor);
-        strcat(to_string, "\"");
+        strcat(to_string, "");
         if (current->next != NULL) {
             //strcat(to_string, ", ");
             strcat(to_string, " ");
@@ -142,7 +186,7 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
         current = current->next;
     }
 
-    strcat(to_string, " ]");
+    strcat(to_string, "");
 
     if (strlen(to_string) < allocated) {
         void *temp = realloc(to_string, length);
@@ -153,9 +197,21 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
         }
         //to_string = realloc(to_string, length);
     }
-
+    fingerprint[strlen(fingerprint) - 1] = '\0'; //to eliminate last ','
+    char *elm = " $ ";
+    concatenate(fingerprint, elm);
+    concatenate(fingerprint, to_string);
+  
     free_list(list_t);
-    return to_string;
+
+    return fingerprint;
+}
+
+void print_statistics() {
+  printf("Numero medio di fattori per read: %d\n", number_of_factors/number_of_reads);
+  printf("Lunghezza media dei fattori: %d\n", factors_length_sum/number_of_factors);
+  printf("Lunghezza massima fattori: %d\n", max_factor_length);
+  printf("Numero di fattori che superano la lunghezza massima: %d\n", number_of_longer_factors);
 }
 
 

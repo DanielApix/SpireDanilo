@@ -1,11 +1,21 @@
 #!/usr/bin/python
 
-import datetime, os
+import datetime, os, time
 
 cimport client_lib
 from libc.stdlib cimport free
 
 cdef client_lib.node_t * cfl_list
+
+def communicate_list_length():
+    num = client_lib.get_number_of_factors()
+    client_lib.set_number_of_elements(num)
+
+#def set_space_informations(read_dimension):
+#    number_of_delimeters = client_lib.get_number_of_delimeters()
+#    number_of_factors = client_lib.get_number_of_factors();
+#    client_lib.set_number_of_elements(number_of_factors)
+#    client_lib.set_number_of_elements(read_dimension)
 
 def call_c_CFL(str):
     cdef char *factorization_c
@@ -13,6 +23,7 @@ def call_c_CFL(str):
     #client_lib.print_list_reverse(cfl_list)
     factorization_c = client_lib.list_to_string(cfl_list, 0)
     #free fact created by malloc in c function (other free need import module level from cpython.mem cimport PyMem_Free)
+    communicate_list_length()
     try:
         factorization = <bytes> factorization_c
     finally:
@@ -26,6 +37,7 @@ def call_c_CFL_icfl(str, c):
     #client_lib.print_list_reverse(cfl_list)
     factorization_c = client_lib.list_to_string(cfl_list, 0)
     #free fact created by malloc in c function (other free need import module level from cpython.mem cimport PyMem_Free)
+    communicate_list_length()
     try:
         factorization = <bytes> factorization_c
     finally:
@@ -39,6 +51,7 @@ def call_c_ICFL(str):
     #client_lib.print_list_reverse(cfl_list)
     factorization_c = client_lib.list_to_string(cfl_list, 1)
     #free fact created by malloc in c function (other free need import module level from cpython.mem cimport PyMem_Free)
+    communicate_list_length()
     try:
         factorization = <bytes> factorization_c
     finally:
@@ -52,6 +65,7 @@ def call_c_ICFL_cfl(str, c):
     #client_lib.print_list_reverse(cfl_list)
     factorization_c = client_lib.list_to_string(cfl_list, 1)
     #free fact created by malloc in c function (other free need import module level from cpython.mem cimport PyMem_Free)
+    communicate_list_length()
     try:
         factorization = <bytes> factorization_c
     finally:
@@ -142,6 +156,8 @@ fact_choice = input("Indichi quale funzione di fattorizzazione adottare:\n1.CFL\
 
 #Inizio del processamento dei file
 
+start = time.time()
+print("Inizio processamento\n")
 #import main_fingerprint
 list_runs = os.listdir(dir_path_experiment)
 
@@ -180,20 +196,13 @@ for run in list_runs:
             else:
                 part = fasta.readline().rstrip()
                 if part == "":
-                    #fact = call_c_CFL(read)
                     fact = check_and_execute_factorization(fact_choice, read, C)
-                    #fact = call_c_CFL_icfl(read, C)
-                    #fact = apply_factorization(read, C, call_c_CFL_icfl)
                     results.write(str(fact))
                     last_block_size = 10
                     break
                 elif part[0] == '>':
-                    #part(id) su file e fact su file
-                    #fact = call_c_CFL(read)
                     fact = check_and_execute_factorization(fact_choice, read, C)
-                    #fact = call_c_CFL_icfl(read, C)
-                    #fact = apply_factorization(read, C, call_c_CFL_icfl)
-                    results.write(str(fact) + '\n' + str(part) + '\n')
+                    results.write(' $ ' + str(fact) + '\n'+ str(part))
                     first = True
                 else:
                     read += part.rstrip()
@@ -203,21 +212,9 @@ for run in list_runs:
     results.close()
     fasta.close()
 
-    list_fasta = os.listdir(run_path)
-    list_fasta = [file for file in list_fasta if file.startswith('results')]
-
-    if (fact_choice == 3 or fact_choice == 4):
-      #compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], False)
-      compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], True)
-    else:
-      compute_fingerprint_by_fasta(dir_path_experiment + "/" + run + "/" + list_fasta[0], False)
-
-    #list_fasta = os.listdir(run_path)
-    #list_fasta = [file for file in list_fasta if file.startswith('fingerprint')]
-
-    #main_fingerprint.kfingerprint(dir_path_experiment + "/" + list_fasta[0], 4)
-
-
     print(run + ' processato')
 print('Tutti i file sono stati processati')
+end = time.time()
+end = end - start;
+print(end)
 input() #Per non causare la chiusura immediata della console

@@ -11,6 +11,13 @@ cdef extern from "../c_files/utils.h":
 
     char *list_to_string(node_t *list, int reverse)
 
+    void print_statistics()
+
+    void communicate_max_fact_length(int c)
+
+    void set_number_of_elements(int num)
+
+    void set_read_dimension(int value)
 
 cdef extern from "../c_files/factorizations.h":
 
@@ -23,3 +30,7 @@ cdef extern from "../c_files/factorizations.h":
     node_t *ICFL_recursive(char word[]);
 
     node_t *ICFL_cfl(char word[], int C);
+
+    int get_number_of_factors()
+
+    int get_number_of_delimeters()
