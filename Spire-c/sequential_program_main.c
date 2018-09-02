@@ -24,8 +24,7 @@ void for_each_element_in(char* directory_path,  void (*apply_function) (struct d
 
 char* append_filename_to_path(char* path, char *name);
 char* process_and_write_in_file(char* to_process, char* (*process_function) (), FILE* file_to_write, char* path);
-char* factorize_read(char* read);
-char* create_fingerprint(char* factorized_read);
+char* create_fingerprint(char* factorized_genom);
 char* create_k_fingerprint(char* fingerprint);
 
 char *apply_factorization(char *genom);
@@ -157,6 +156,8 @@ void process_fasta(struct dirent *file_description, char *path) {
   char str[300];
   FILE *fasta_file;
   int error;
+  char *result;
+  char *result2;
 
   if (strlen(file_description->d_name) > strlen(".fasta")) {
     if (strstr(file_description->d_name, ".fasta") != NULL) {   //if it has .fasta extention
@@ -173,7 +174,12 @@ void process_fasta(struct dirent *file_description, char *path) {
       if (fasta_file != NULL) {
         while (fscanf(fasta_file, "%s %s", header_read, genom_read) != EOF) {
           if (factorization_file != NULL) {
-            error = fprintf(factorization_file, "%s\n%s\n", header_read, apply_factorization(genom_read));
+            result = apply_factorization(genom_read);
+            error = fprintf(factorization_file, "%s\n%s\n", header_read, result);
+            result = create_fingerprint(result);
+            fprintf(fingerprint_file, "%s %s\n", header_read, result);
+ //           printf("factorization: %s\n", result);
+           // fprintf(fingerprint_file, "%s %s\n", header_read, result);
           }
         }
         fclose(factorization_file);
@@ -246,11 +252,55 @@ char* process_and_write_in_file(char* to_process, char* (*process_function) (), 
   return p;
 }
 
-char* factorize_read(char* read) {
-}
-
 /*pre-condition: param must be the result of factorize_read or format equivalent*/
-char* create_fingerprint(char* factorized_read) {
+char* create_fingerprint(char* factorized_genom) {
+
+  int i = 2;
+  int j = 0;
+  int cont = 0;
+  int dim = strlen(factorized_genom);
+  char *fingerprint = malloc(dim);
+  char converted_number[5];
+
+  while (1) {
+
+    switch (factorized_genom[i]) {
+      case '<':
+        fingerprint[j++] = '-';
+        fingerprint[j++] = '1';
+        fingerprint[j++] = ',';
+        i += 4;
+        //printf("next character: %c\n", factorized_genom[i]);
+        break;
+      case '>':
+        fingerprint[j++] = '0';
+        fingerprint[j++] = ',';
+        i += 4;
+        break;
+      case ']':
+        j--;
+        fingerprint[j] = '\0';
+        return fingerprint;
+//        printf("found '['\n");
+        break;
+      case '\"':
+        if (cont > 0) {   //if it defines the end of a factor
+          sprintf(converted_number, "%d", cont);
+          strcat(fingerprint, converted_number);
+          j += strlen(converted_number);
+          fingerprint[j++] = ',';
+          cont = 0;
+        }
+        else {
+          i++;
+        }
+        break;
+      default:
+        i++;
+        cont++;   //cause it is one of the characters
+    }
+    fingerprint[j] = '\0';
+  }
 }
 
 /*pre-condition: param must be the result of create_fingerprint or format equivalent*/
