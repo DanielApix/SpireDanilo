@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "utils.h"
-#include "factorizations.h"
 
 int index_in_alphabet(char t, char typ_alphabet_list[]) {
     int i;

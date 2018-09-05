@@ -15,7 +15,7 @@
 int fact_choice;
 
 char root_path[100];     //...of the directory to process
-int max_fact_length = 4; //arbitrary chosen and requested to the user
+int max_fact_length = 0; //arbitrary chosen and requested to the user
 
 FILE *factorization_file, *fingerprint_file, *kfingerprint_file;
 
@@ -119,12 +119,15 @@ int main() {
     scanf("%d", &max_fact_length);
   }
 
+  communicate_max_fact_length(max_fact_length);
+
   printf("fornisca il numero di elementi per ciascuna finestra per le k-fingerprint\n");
   scanf("%d", &window_dimension);
 
   initialize_k_finger();
   for_each_element_in(root_path, process_all_fasta_files);
 
+  print_statistics();
   return 0;
 }
 
