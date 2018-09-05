@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <time.h>
 #include "factorizations.h"
 #include "utils.h"
 
@@ -17,7 +18,7 @@ int fact_choice;
 char root_path[100];     //...of the directory to process
 int max_fact_length = 0; //arbitrary chosen and requested to the user
 
-FILE *factorization_file, *fingerprint_file, *kfingerprint_file;
+FILE *factorization_file, *fingerprint_file, *kfingerprint_file, *oneformat_file;
 
 char header_read[300];  //refers to the current read
 
@@ -124,10 +125,16 @@ int main() {
   printf("fornisca il numero di elementi per ciascuna finestra per le k-fingerprint\n");
   scanf("%d", &window_dimension);
 
+  time_t m;
+  time_t now = time(NULL);
+
   initialize_k_finger();
   for_each_element_in(root_path, process_all_fasta_files);
 
   print_statistics();
+
+  m = difftime(time(NULL), now);
+  printf("tempo totale in secondi: %ld\n",m);
   return 0;
 }
 
@@ -182,7 +189,8 @@ void process_fasta(struct dirent *file_description, char *path) {
   char str[300];
   FILE *fasta_file;
   int error;
-  char *result;  //da modificare
+  char *result1;
+  char *result2;
 
   int i;  //can be deleted
 
@@ -193,6 +201,7 @@ void process_fasta(struct dirent *file_description, char *path) {
       open_towrite_file("factorization", file_description->d_name, directory_path);
       open_towrite_file("fingerprint", file_description->d_name, directory_path);
       open_towrite_file("kfingerprint", file_description->d_name, directory_path);
+      open_towrite_file("oneformat", file_description->d_name, directory_path);
 
       if ((fasta_file = fopen(path, "r")) == NULL) {
         printf("error: %s\n\n", strerror(errno));
@@ -201,10 +210,11 @@ void process_fasta(struct dirent *file_description, char *path) {
       if (fasta_file != NULL) {
         while (fscanf(fasta_file, "%s %s", header_read, genom_read) != EOF) {
           if (factorization_file != NULL) {
-            result = apply_factorization(genom_read);
-            error = fprintf(factorization_file, "%s\n%s\n", header_read, result);
-            result = create_fingerprint(result);
-            fprintf(fingerprint_file, "%s %s\n", header_read, result);
+            result1 = apply_factorization(genom_read);
+            error = fprintf(factorization_file, "%s\n%s\n", header_read, result1);
+            result2 = create_fingerprint(result1);
+            fprintf(fingerprint_file, "%s %s\n", header_read, result2);
+            fprintf(oneformat_file, "%s %c %s %c %s\n", header_read, '$', result2, '$', result1);
           }
         }
         fclose(factorization_file);
@@ -236,6 +246,10 @@ void open_towrite_file(char *name, char *fasta_name, char *directory_path) {
   else if (strcmp(name, "kfingerprint") == 0) {
     file_to_open = kfingerprint_file = fopen(append_filename_to_path(directory_path, filename), "w");
   }
+  else if (strcmp(name, "oneformat") == 0) {
+    file_to_open = oneformat_file = fopen(append_filename_to_path(directory_path, filename), "w");
+  }
+
 
   if (file_to_open == NULL) {
     printf("Non è stato possibile aprire in scrittura il file %s: %s\n\n", filename, strerror(errno));
