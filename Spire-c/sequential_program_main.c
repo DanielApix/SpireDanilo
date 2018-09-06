@@ -150,7 +150,7 @@ void for_each_element_in(char* directory_path,  void (*apply_function) (struct d
 
   if (file) {
      while ((inner_file = readdir(file)) != NULL) {
-       printf("arguments passed: %s, %s\n", directory_path, inner_file->d_name);
+    //   printf("arguments passed: %s, %s\n", directory_path, inner_file->d_name);
        (*apply_function)(inner_file, append_filename_to_path(directory_path, inner_file->d_name));
      }
   }
@@ -175,7 +175,7 @@ void process_all_fasta_files(struct dirent *subdirectory_description, char* curr
   DIR *subdirectory;
 
   if ((strcmp(subdirectory_description->d_name, ".") != 0) && (strcmp(subdirectory_description->d_name, "..") != 0)) {
-    printf("processing %s\n", current_path);
+    //printf("processing %s\n", current_path);
     for_each_element_in(current_path, process_fasta);
   }
 }
@@ -198,6 +198,7 @@ void process_fasta(struct dirent *file_description, char *path) {
     if (strstr(file_description->d_name, ".fasta") != NULL) {   //if it has .fasta extention
 
       strncpy(directory_path, path, strlen(path) - strlen(file_description->d_name) - 1);
+      printf("d_name: %s\n", file_description->d_name);
       open_towrite_file("factorization", file_description->d_name, directory_path);
       open_towrite_file("fingerprint", file_description->d_name, directory_path);
       open_towrite_file("kfingerprint", file_description->d_name, directory_path);
@@ -211,13 +212,18 @@ void process_fasta(struct dirent *file_description, char *path) {
         while (fscanf(fasta_file, "%s %s", header_read, genom_read) != EOF) {
           if (factorization_file != NULL) {
             result1 = apply_factorization(genom_read);
+            //printf("worked\n");
             error = fprintf(factorization_file, "%s\n%s\n", header_read, result1);
+            //printf("not seen\n");
             result2 = create_fingerprint(result1);
             fprintf(fingerprint_file, "%s %s\n", header_read, result2);
             fprintf(oneformat_file, "%s %c %s %c %s\n", header_read, '$', result2, '$', result1);
           }
         }
         fclose(factorization_file);
+        fclose(fingerprint_file);
+        fclose(kfingerprint_file);
+        fclose(oneformat_file);
       }
     }
     else {
@@ -234,6 +240,7 @@ void open_towrite_file(char *name, char *fasta_name, char *directory_path) {
 
   filename = malloc(strlen(name) + strlen(fasta_name));
   strncpy(filename, fasta_name, strlen(fasta_name) - strlen(".fasta"));
+  filename[strlen(fasta_name) - strlen(".fasta")] = '\0';
   strcat(filename, "-");
   strcat(filename, name);
 
@@ -280,6 +287,7 @@ char *apply_factorization(char *genom) {
       second_parameter_value = 1;
       break;
   }
+
   return list_to_string(factorized_genom, second_parameter_value);
 }
 
