@@ -97,17 +97,6 @@ char *substring(char word[], int x, int y) {
 	return sub;
 }
 
-/*Handles the case in which dest has not enough space and concatenates*/
-char *concatenate(char *dest, char *src) {
-  int destlen = strlen(dest);
-  int resultingspace = destlen + strlen(src) + 1;
-  if (destlen > resultingspace) {
-    realloc(dest, resultingspace);
-  }
-  strcat(dest, src);
-  return dest;
-}
-
 int number_of_elements = 0;
 
 void set_number_of_elements(int num) {
@@ -142,15 +131,14 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
 	    current->next = prev;
     }
 
-    int allocated = 400;
+    int allocated = number_of_elements * 4 + read_dimension - 1;
     char *to_string = malloc(allocated);
-    char *fingerprint = malloc(allocated);
-    strcpy(fingerprint, "");
-    strcpy(to_string, "");
+    strcpy(to_string, "[ ");
 
     int length = 5; //memory for [  ]\0
     node_t *list_t = current;
     while (current != NULL) {
+	/*it should never be executed: it is useful in case of bug in setting the space*/
         if ((length + strlen(current->factor) + 3) > allocated) { //3memory for " "
             allocated += (strlen(current->factor) + 3); //cosi sempre precisa oppure numero fisso
             void *temp = realloc(to_string, allocated);
@@ -160,34 +148,34 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
                 printf("REALLOC FAILED");
             }
             //to_string = realloc(to_string, allocated);
-        }
-        char value[12];
-        sprintf(value, "%d", strlen(current->factor));
-        if (strcmp(current->factor, "<<") != 0 && strcmp(current->factor, ">>") != 0) {
-          number_of_factors++;
-          concatenate(fingerprint, &value);
-          
-          char *elm = ",";
-          concatenate(fingerprint, elm);
         } 
-        else {
-          char *elm = (strcmp(current->factor, "<<") != 0) ? "0," : "-1,";
-          concatenate(fingerprint, elm);
-        }
-        strcat(to_string, "");
+        strcat(to_string, "\"");
         strcat(to_string, current->factor);
-        strcat(to_string, "");
+        strcat(to_string, "\"");
         if (current->next != NULL) {
             //strcat(to_string, ", ");
             strcat(to_string, " ");
             length += 1;
         }
         length += (strlen(current->factor) + 2);
+        if (strcmp(current->factor, "<<") && strcmp(current->factor, ">>")) {
+            number_of_factors++;
+            int factor_length = strlen(current->factor);
+            factors_length_sum += factor_length;
+            if (factor_length > max_factor_length) {
+              max_factor_length = factor_length;
+            }
+            if (factor_length > max_fact_len) {
+              number_of_longer_factors++;
+            }
+            
+        }
         current = current->next;
     }
 
-    strcat(to_string, "");
+    strcat(to_string, " ]");
 
+  /*it should never be executed: useful in case of bug in setting the space*/
     if (strlen(to_string) < allocated) {
         void *temp = realloc(to_string, length);
         if (temp != NULL) {
@@ -196,15 +184,11 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
             printf("REALLOC FAILED");
         }
         //to_string = realloc(to_string, length);
-    }
-    fingerprint[strlen(fingerprint) - 1] = '\0'; //to eliminate last ','
-    char *elm = " $ ";
-    concatenate(fingerprint, elm);
-    concatenate(fingerprint, to_string);
-  
+    } 
+
     free_list(list_t);
 
-    return fingerprint;
+    return to_string;
 }
 
 void print_statistics() {
