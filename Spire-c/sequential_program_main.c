@@ -1,5 +1,5 @@
 /*
-  Main program of Sequential Spire-c. It allows the user to factorize fasta files containing reads.
+  Main program of Sequential Spire-c. It allows the user to process fasta files containing reads.
   Author: Danilo Apicella
   Contact: danielapix@hotmail.it
 */
@@ -115,8 +115,8 @@ int main() {
     printf("Fornisca dimensione massima di ciascun fattore\n");
     scanf("%d", &max_fact_length);
   }
-
-/*  fact_choice = 3;
+/*
+  fact_choice = 3;
   strcpy(root_path, "/home/danilo/Scrivania/example-c");
   window_dimension = 4;
   max_fact_length = 30;
@@ -167,8 +167,8 @@ char *inputString(FILE* fp, size_t size, char ending_character){
 /*Reads an entire stream line until it reaches the \n character and records it in a pointer.
   if current_size is zero, that is a buffer is considered as it hadn't been previousely allocated, another one will be.
   NOTE: buffer doesn't store the result at the end of the processing.
-  pre-condition buffer: buffer has to point to a previousely dinamically allocated memory or to NULL
-  pre-condition current_size: points to a variable whose value >= 0
+  pre-condition buffer: buffer must point to a previousely dinamically allocated memory or to NULL
+  pre-condition current_size: must point to a variable whose value >= 0
   pre-condition stream: must point to an existing file
   return: next string read up to the next '\n' reached
 */
@@ -267,8 +267,9 @@ void process_all_fasta_files(struct dirent *subdirectory_description, char* curr
   will be created and saved in the same directory containing the file to be processed
   pre-condition file_description: must descript an existing file
   pre-condition path: must refer to the descripted file
-  post-condition: given the name "nam" of the file, nam-factorization.txt, nam-fingerprint.txt, nam-kfingerprint,
-      nam-oneformat.txt will be created in the same directory of the fasta file with the respective output inside*/
+  pre-condition: current_header_size and current_genom_size must be 0
+  post-condition: given the name nam of the fasta file without ".fasta" at the end, nam-factorization.txt, nam-fingerprint.txt,
+      nam-kfingerprint, nam-oneformat.txt will be created in the same directory of the fasta file with the respective output inside*/
 void process_fasta(struct dirent *file_description, char *path) {
 
   char directory_path[100];
@@ -318,7 +319,7 @@ void process_fasta(struct dirent *file_description, char *path) {
 /*
   It creates the file in the specified directory.
   param name: name to concatenate with the fasta file one that will be the name of the file to be opened
-  param directory_path: directory path in which the file to be created will be.
+  param directory_path: directory path in which the file to be created will be
   pre-condition name: name == "factorization" || name == "fingerprint" || name == "kfingerprint" || name == "oneformat"
   pre-condition fasta_name: must contain ".fasta" at the end of its name
   pre-condition directory_path: must be the path of an existing directory
@@ -445,12 +446,13 @@ char* create_fingerprint(char* factorized_genom) {
   }
 }
 
-/*It adds a new element to the fingerprint tail and in case it is full, writes the next kfingerprint.
+/*It adds a new element to the fingerprint tail and in case it is full or it isn't and the fingerprints are ended,
+      writes the next kfingerprint line.
   param fingerprint_number: if it is -2, all the fingerprints have been created and the tail must deal with that,
-      and if it is -1 or 0, start and end of the second time factorized factors are found respectively. Other values
-      are just normal fingerprints
+      and if it is -1 or 0, it means start and end of the second time factorized factors are found respectively.
+      Other values are just normal fingerprints
   pre-condition fingerprint_number: >= -2
-  pre-condition: all the values must be initialized before the start of each fingerprint scan
+  pre-condition: all the values must be initialized before the start of each series of fingerprint to be scanned
   post_condition: if the got informations are enough, new kfingerprints are written in the k-fingerprint file
 */
 void fill_k_fingerprint(int fingerprint_number) {
@@ -498,6 +500,11 @@ void pop_tail(int fingerprint_number) {
 }
 
 /* It records the tails content in the k-fingerprint file as the right format.
+   pre-condition: window_dimension must match the distance between start_window_limit and end_window_limit
+   pre-condtion: zero_one_tail and finger_tail must be integer arrays
+   pre-condition: zero_one_tail and finger_tail must have window_dimension as dimension
+   pre-condition: kfingerprint_file must point to an opened file in write mode
+   pre-condition: header_read != NULL and must be a string
 */
 void flush() {
 
@@ -533,6 +540,10 @@ void flush() {
   fprintf(kfingerprint_file, "%s %c %s %c %s %d\n", fingerprint_result, '$', zero_one_result, '$', header_read, cont_shift);
 }
 
+/*
+  pre-condition: variables to be initialized must mach the compatible types
+  post-condition: tails are set to a corret state configuration
+*/
 void initialize_tail() {
 
   int i = 0;
@@ -549,7 +560,9 @@ void initialize_tail() {
   }
 }
 
-/*Sets the number of elements for each window and sets the tails*/
+/*Sets the number of elements for each window and sets the tails
+  pre-condition: window_dimension > 0
+*/
 void initialize_k_finger() {
   zero_one_tail = calloc(window_dimension, sizeof(int));
   finger_tail = calloc(window_dimension, sizeof(int));
