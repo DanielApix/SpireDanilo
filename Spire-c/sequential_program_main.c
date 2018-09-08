@@ -15,7 +15,7 @@
 
 int fact_choice;
 
-char *root_path;     //...of the directory to process
+char root_path[100];     //...of the directory to process
 int max_fact_length = 0; //arbitrary chosen and requested to the user
 
 FILE *factorization_file, *fingerprint_file, *kfingerprint_file, *oneformat_file;
@@ -93,7 +93,7 @@ int main() {
   /*Catching input from the user*/
 
   printf("Benvenuto nel programma sequenziale Spire\n\n");
-
+/*
   printf("Fornisca la directory dei file fasta\n");
   root_path = inputString(stdin, 100, '\n');
 
@@ -115,13 +115,17 @@ int main() {
     printf("Fornisca dimensione massima di ciascun fattore\n");
     scanf("%d", &max_fact_length);
   }
-
+*/
+  fact_choice = 3;
+  strcpy(root_path, "/home/danilo/Scrivania/example-c");
+  window_dimension = 4;
+  max_fact_length = 30;
   communicate_max_fact_length(max_fact_length);
 
-
+ /*
   printf("fornisca il numero di elementi per ciascuna finestra per le k-fingerprint\n");
   scanf("%d", &window_dimension);
-
+*/
   time_t m;
   time_t now = time(NULL);
 
@@ -135,7 +139,12 @@ int main() {
   return 0;
 }
 
-/*Used as scanf handling the case in which the defined dimension is not enough.*/
+/*Used as scanf handling in the case in which the defined dimension is not enough.
+  pre-condition fp: == stdio
+  pre-condition size: > 0
+  pre-condition ending_character: != '\0'
+  return: input read from the start to the ending_character
+*/
 char *inputString(FILE* fp, size_t size, char ending_character){
 //The size is extended by the input with the value of the provisional
     char *str;
@@ -155,11 +164,13 @@ char *inputString(FILE* fp, size_t size, char ending_character){
     return realloc(str, sizeof(char)*len);
 }
 
-/*Reads an entire stream line until it reaches the \n character and records it in in a pointer.
-  if current_size is zero, that is a buffer hadn't been previousely allocated, another one will be
+/*Reads an entire stream line until it reaches the \n character and records it in a pointer.
+  if current_size is zero, that is a buffer is considered as it hadn't been previousely allocated, another one will be.
+  NOTE: buffer doesn't store the result at the end of the processing.
   pre-condition buffer: buffer has to point to a previousely dinamically allocated memory or to NULL
-  pre-condition current_size: must be >= 0
-  pre-condition stream: must be != NULL
+  pre-condition current_size: points to a variable whose value >= 0
+  pre-condition stream: must point to an existing file
+  return: next string read up to the next '\n' reached
 */
 char* safe_fgets(char* buffer, int *current_size, FILE *stream) {
 
@@ -200,9 +211,14 @@ char* safe_fgets(char* buffer, int *current_size, FILE *stream) {
 }
 
 /*
+  It scans the directory of the given path and applies the function defined to each contained file or subdirectory
+  passing as argument relevant information as description of the file and it's path.
+  param directory_path: must contain the name of the directory in addition to the location description
   param apply_function: the first param of this function is referred to the description of the current examined file and
-      the second one for the path of the current examined file
-  pre-condition: path refers to an existing directory location
+      the second one to the path of the current examined file
+  pre-condition directory_path: refers to an existing directory location
+  pre-condition apply_function: != NULL
+  post-condition: apply_function is applied to each file or subdirectory in the directory specified by the path
 */
 void for_each_element_in(char* directory_path,  void (*apply_function) (struct dirent *, char *)) {
 
@@ -220,7 +236,11 @@ void for_each_element_in(char* directory_path,  void (*apply_function) (struct d
   closedir(file);
 }
 
-/*adding '/' to create a correct path*/
+/*...adding '/' to create a correct path.
+  pre-condition path: != NULL
+  pre-condition name: != NULL
+  return: *path + '/' + *name
+*/
 char* append_filename_to_path(char* path, char *name) {
   char *new_path = malloc(strlen(path) + strlen(name) + 3);
 
@@ -230,7 +250,11 @@ char* append_filename_to_path(char* path, char *name) {
   return new_path;
 }
 
-
+/*
+  pre-condition subdirectory_description: != NULL
+  pre-condition current_path: must refer to the file descripted by subdirectory_description
+  post-condition: all fasta files in the specified directory will be processed
+*/
 void process_all_fasta_files(struct dirent *subdirectory_description, char* current_path) {
 
   if ((strcmp(subdirectory_description->d_name, ".") != 0) && (strcmp(subdirectory_description->d_name, "..") != 0)) {
@@ -239,7 +263,12 @@ void process_all_fasta_files(struct dirent *subdirectory_description, char* curr
 }
 
 
-/*processes fasta file specified by the file description in the directory specified by the path*/
+/*If the file descripted is a fasta file, factorization, fingerprint, kfingerprint and the one format of the first three
+  will be created and saved in the same directory containing the file to be processed
+  pre-condition file_description: must descript an existing file
+  pre-condition path: must refer to the descripted file
+  post-condition: given the name "nam" of the file, nam-factorization.txt, nam-fingerprint.txt, nam-kfingerprint,
+      nam-oneformat.txt will be created in the same directory of the fasta file with the respective output inside*/
 void process_fasta(struct dirent *file_description, char *path) {
 
   char directory_path[100];
@@ -272,6 +301,8 @@ void process_fasta(struct dirent *file_description, char *path) {
           fprintf(oneformat_file, "%s %c %s %c %s\n", header_read, '$', result2, '$', result1);
         }
       }
+  //    if (factorization_file == NULL)
+  //      printf("factorization_file lost\n");
       fclose(factorization_file);
       fclose(fingerprint_file);
       fclose(oneformat_file);
@@ -284,7 +315,16 @@ void process_fasta(struct dirent *file_description, char *path) {
   }
 }
 
-
+/*
+  It creates the file in the specified directory.
+  param name: name to concatenate with the fasta file one that will be the name of the file to be opened
+  param directory_path: directory path in which the file to be created will be.
+  pre-condition name: name == "factorization" || name == "fingerprint" || name == "kfingerprint" || name == "oneformat"
+  pre-condition fasta_name: must contain ".fasta" at the end of its name
+  pre-condition directory_path: must be the path of an existing directory
+  post-condition one of the variables factorization_file, fingerprint_file, kfingerprint_file, oneformat_file will contain
+      a pointer to an opened file in write mode with the name descripted below depending on the name parameter value respectively
+*/
 void open_towrite_file(char *name, char *fasta_name, char *directory_path) {
 
   FILE *file_to_open;
@@ -315,6 +355,10 @@ void open_towrite_file(char *name, char *fasta_name, char *directory_path) {
   }
 }
 
+/*
+  pre-condition: fact_choice >= 1 && fact_choice <= 4
+  return: factorized genom
+*/
 char *apply_factorization(char *genom) {
 
   node_t *factorized_genom;
@@ -342,14 +386,13 @@ char *apply_factorization(char *genom) {
   return list_to_string(factorized_genom, second_parameter_value);
 }
 
-/*path is referred to the location of the file to write*/
-char* process_and_write_in_file(char* to_process, char* (*process_function) (), FILE* file_to_write, char* path) {
-
-  char* p = NULL;
-  return p;
-}
-
-/*pre-condition: param must be the result of factorize_read or format equivalent*/
+/* It creates the fingerprint and k-fingerprint of the factorized genom. The k-fingerprints will be stored in
+       the file pointed by kfingerprint_file variable.
+  pre-condition factorized_genom: must be the result of factorize_read or format equivalent
+  pre-condition: kfingerprint_file must point to an existing opened file in writing mode
+  post-condition: kfingerprints will be written in the correct format in the file pointed by the kfingerprint_file variable
+  return: fingerprint of the factorized genom
+*/
 char* create_fingerprint(char* factorized_genom) {
 
   int i = 2;
@@ -402,7 +445,14 @@ char* create_fingerprint(char* factorized_genom) {
   }
 }
 
-/*Adds a new element to the fingerprint tail*/
+/*It adds a new element to the fingerprint tail and in case it is full, writes the next kfingerprint.
+  param fingerprint_number: if it is -2, all the fingerprints have been created and the tail must deal with that,
+      and if it is -1 or 0, start and end of the second time factorized factors are found respectively. Other values
+      are just normal fingerprints
+  pre-condition fingerprint_number: >= -2
+  pre-condition: all the values must be initialized before the start of each fingerprint scan
+  post_condition: if the got informations are enough, new kfingerprints are written in the k-fingerprint file
+*/
 void fill_k_fingerprint(int fingerprint_number) {
 
   if (fingerprint_number == -2) {
@@ -437,12 +487,18 @@ void fill_k_fingerprint(int fingerprint_number) {
   }
 }
 
+/* It adds a new fingerprint and the bool value about the fact it is the result of a second factorization
+   at the head of the tails respectively.
+   pre-condiion: finger_tail and zero_one_tail must be synchronized (zero_one_tail[i] must regard finger_tail[i])
+*/
 void pop_tail(int fingerprint_number) {
 
   finger_tail[end_window_limit] = fingerprint_number;
   zero_one_tail[end_window_limit] = is_one;
 }
 
+/* It records the tails content in the k-fingerprint file as the right format.
+*/
 void flush() {
 
   const int FINGERPRINT_MAX_DIMENSION = 3;
