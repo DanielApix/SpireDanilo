@@ -20,7 +20,10 @@ int max_fact_length = 0; //arbitrary chosen and requested to the user
 
 FILE *factorization_file, *fingerprint_file, *kfingerprint_file, *oneformat_file;
 
-char header_read[300];  //refers to the current read
+char *header_read;  //refers to the current read
+char *genom_read;
+int current_header_size = 0;
+int current_genom_size = 0;
 
 /*these refer to the k-fingerprint calculus. To better understand refer to the documentation.*/
 int *zero_one_tail, *finger_tail;
@@ -30,10 +33,11 @@ int is_one = 0;   //boolean equivalent to determine if current finger refers to 
 int start_window_limit = 0;
 int cont_shift = 0;  //number of shitfts from the start of the read dealing with the current window
 int has_not_been_filled_once = 1;  //if it hasn't been filled at least once for the current read
-int is_last_fingerprint = 0;
 int recived_exactly_k_fingers = 0;
 /**/
 
+char *inputString(FILE* fp, size_t size, char ending_character);
+char* safe_fgets(char* buffer, int *current_size, FILE *stream);
 
 void for_each_element_in(char* directory_path,  void (*apply_function) (struct dirent *, char *));
 
@@ -86,20 +90,12 @@ stampa le statistiche
 
 int main() {
 
-  char path[100];
-  DIR *root_directory;
-  DIR *subdirectory;
-  struct dirent *dir;
-  struct dirent *inner_file; // cointained in one of the subdirectories
-
-  char str[100];
-
   /*Catching input from the user*/
 
   printf("Benvenuto nel programma sequenziale Spire\n\n");
-
+/*
   printf("Fornisca la directory dei file fasta\n");
-  scanf("%s", root_path); //warning: not possible to enter more than 100 characters and with spaces
+  root_path = inputString(stdin, 100, '\n');
 
   do {
     printf("Fornisca una delle seguenti opzioni di fattorizzazione\n");
@@ -119,12 +115,17 @@ int main() {
     printf("Fornisca dimensione massima di ciascun fattore\n");
     scanf("%d", &max_fact_length);
   }
-
+*/
+  fact_choice = 3;
+  strcpy(root_path, "/home/danilo/Scrivania/example-c");
+  window_dimension = 4;
+  max_fact_length = 30;
   communicate_max_fact_length(max_fact_length);
 
+ /*
   printf("fornisca il numero di elementi per ciascuna finestra per le k-fingerprint\n");
   scanf("%d", &window_dimension);
-
+*/
   time_t m;
   time_t now = time(NULL);
 
@@ -136,6 +137,70 @@ int main() {
   m = difftime(time(NULL), now);
   printf("tempo totale in secondi: %ld\n",m);
   return 0;
+}
+
+/*Used as scanf handling the case in which the defined dimension is not enough.*/
+char *inputString(FILE* fp, size_t size, char ending_character){
+//The size is extended by the input with the value of the provisional
+    char *str;
+    int ch;
+    size_t len = 0;
+    str = realloc(NULL, sizeof(char)*size);//size is start size
+    if(!str)return str;
+    while(EOF!=(ch=fgetc(fp)) && ch != '\n'){
+        str[len++]=ch;
+        if(len==size){
+            str = realloc(str, sizeof(char)*(size+=16));
+            if(!str)return str;
+        }
+    }
+    str[len++]='\0';
+
+    return realloc(str, sizeof(char)*len);
+}
+
+/*Reads an entire stream line until it reaches the \n character and records it in in a pointer.
+  if current_size is zero, that is a buffer hadn't been previousely allocated, another one will be
+  pre-condition buffer: buffer has to point to a previousely dinamically allocated memory or to NULL
+  pre-condition current_size: must be >= 0
+  pre-condition stream: must be != NULL
+*/
+char* safe_fgets(char* buffer, int *current_size, FILE *stream) {
+
+
+  char* tmp;
+  char* aux_tmp;
+  const int STARTING_DIMENSION = 5;
+  int actual_dimension;
+
+  tmp = NULL;
+
+  if (*current_size == 0) {
+    buffer = malloc(STARTING_DIMENSION * sizeof(char));
+    *current_size = STARTING_DIMENSION;
+  }
+  if (fgets(buffer, *current_size, stream) == NULL) {
+    return NULL;
+  }
+
+  while (buffer[strlen(buffer) - 1] != '\n') {
+
+    *current_size = (*current_size * 2) + 1;
+    actual_dimension = *current_size * sizeof(char);
+    tmp = (tmp == NULL) ? malloc(actual_dimension) : realloc(tmp, actual_dimension);
+    strcpy(tmp, buffer);
+    tmp[strlen(buffer)] = '\0';
+    fgets(buffer, strlen(buffer), stream);
+    strcat(tmp, buffer);
+
+    aux_tmp = buffer;
+    buffer = tmp;
+    tmp = aux_tmp;
+  }
+  buffer[strlen(buffer) - 1] = '\0';
+  if (tmp != NULL)
+    free(tmp);
+  return buffer;
 }
 
 /*
@@ -150,7 +215,6 @@ void for_each_element_in(char* directory_path,  void (*apply_function) (struct d
 
   if (file) {
      while ((inner_file = readdir(file)) != NULL) {
-    //   printf("arguments passed: %s, %s\n", directory_path, inner_file->d_name);
        (*apply_function)(inner_file, append_filename_to_path(directory_path, inner_file->d_name));
      }
   }
@@ -172,10 +236,8 @@ char* append_filename_to_path(char* path, char *name) {
 
 
 void process_all_fasta_files(struct dirent *subdirectory_description, char* current_path) {
-  DIR *subdirectory;
 
   if ((strcmp(subdirectory_description->d_name, ".") != 0) && (strcmp(subdirectory_description->d_name, "..") != 0)) {
-    //printf("processing %s\n", current_path);
     for_each_element_in(current_path, process_fasta);
   }
 }
@@ -184,19 +246,14 @@ void process_all_fasta_files(struct dirent *subdirectory_description, char* curr
 /*processes fasta file specified by the file description in the directory specified by the path*/
 void process_fasta(struct dirent *file_description, char *path) {
 
-  char genom_read[300];   //also body of read
   char directory_path[100];
-  char str[300];
   FILE *fasta_file;
-  int error;
   char *result1;
   char *result2;
 
-  int i;  //can be deleted
-
   if (strlen(file_description->d_name) > strlen(".fasta")) {
     if (strstr(file_description->d_name, ".fasta") != NULL) {   //if it has .fasta extention
-
+      directory_path[strlen(path) - strlen(file_description->d_name) - 1] = '\0';
       strncpy(directory_path, path, strlen(path) - strlen(file_description->d_name) - 1);
       printf("d_name: %s\n", file_description->d_name);
       open_towrite_file("factorization", file_description->d_name, directory_path);
@@ -209,22 +266,23 @@ void process_fasta(struct dirent *file_description, char *path) {
       }
       /*Processing of fasta file*/
       if (fasta_file != NULL) {
-        while (fscanf(fasta_file, "%s %s", header_read, genom_read) != EOF) {
-          if (factorization_file != NULL) {
-            result1 = apply_factorization(genom_read);
-            //printf("worked\n");
-            error = fprintf(factorization_file, "%s\n%s\n", header_read, result1);
-            //printf("not seen\n");
-            result2 = create_fingerprint(result1);
-            fprintf(fingerprint_file, "%s %s\n", header_read, result2);
-            fprintf(oneformat_file, "%s %c %s %c %s\n", header_read, '$', result2, '$', result1);
-          }
+        while ( (header_read = safe_fgets(header_read, &current_header_size, fasta_file)) != NULL ) {
+          genom_read = safe_fgets(genom_read, &current_genom_size, fasta_file);
+
+          result1 = apply_factorization(genom_read);
+          fprintf(factorization_file, "%s\n%s\n", header_read, result1);
+          result2 = create_fingerprint(result1);
+          fprintf(fingerprint_file, "%s %s\n", header_read, result2);
+          fprintf(oneformat_file, "%s %c %s %c %s\n", header_read, '$', result2, '$', result1);
         }
-        fclose(factorization_file);
-        fclose(fingerprint_file);
-        fclose(kfingerprint_file);
-        fclose(oneformat_file);
       }
+  //    if (factorization_file == NULL)
+  //      printf("factorization_file lost\n");
+      fclose(factorization_file);
+      fclose(fingerprint_file);
+      fclose(oneformat_file);
+      current_header_size = 0;
+      current_genom_size = 0;
     }
     else {
       printf("Non è stato possibile aprire il file fasta %s\nErrore: %s\n", file_description->d_name, strerror(errno));
@@ -267,7 +325,6 @@ char *apply_factorization(char *genom) {
 
   node_t *factorized_genom;
   int second_parameter_value;
-  char *factorized_genom_string;
 
   switch (fact_choice) {
     case 1:
@@ -309,8 +366,6 @@ char* create_fingerprint(char* factorized_genom) {
   char converted_number[5];
 
   while (1) {
-//    printf("found %c\n", factorized_genom[i]);
-//    printf("blocked with %s at position %d\n", factorized_genom, i);
     switch (factorized_genom[i]) {
       case '<':
         fingerprint[j++] = '-';
@@ -318,7 +373,6 @@ char* create_fingerprint(char* factorized_genom) {
         fingerprint[j++] = ',';
         i += 4;
         fill_k_fingerprint(-1);
-        //printf("next character: %c\n", factorized_genom[i]);
         break;
       case '>':
         fingerprint[j++] = '0';
@@ -331,7 +385,6 @@ char* create_fingerprint(char* factorized_genom) {
         fingerprint[j] = '\0';
         fill_k_fingerprint(-2);
         return fingerprint;
-//        printf("found '['\n");
         break;
       case '\"':
         if (cont > 0) {   //if it defines the end of a factor
@@ -340,7 +393,6 @@ char* create_fingerprint(char* factorized_genom) {
           i += 2;
           j += strlen(converted_number);
           fingerprint[j++] = ',';
-//          printf("probable end: %c\n", factorized_genom[i + 3]);
           fill_k_fingerprint(cont);
           cont = 0;
         }
@@ -359,7 +411,6 @@ char* create_fingerprint(char* factorized_genom) {
 /*Adds a new element to the fingerprint tail*/
 void fill_k_fingerprint(int fingerprint_number) {
 
-  //printf("got %d\n", fingerprint_number);
   if (fingerprint_number == -2) {
     if (!recived_exactly_k_fingers)
       flush();
@@ -367,18 +418,14 @@ void fill_k_fingerprint(int fingerprint_number) {
     return;
   }
 
-  //printf("inizio processamento k-fingerprint\n");
   if ( (fingerprint_number == -1) || (fingerprint_number == 0) ) {
     is_one = (fingerprint_number == -1);
-//    printf("revealed is_one: %d\n", is_one);
   }
   else {
     if (has_not_been_filled_once) {
       end_window_limit++;
-//      printf("has_not_been_filled_once\n");
       pop_tail(fingerprint_number);
       if (end_window_limit == window_dimension - 1) {
-//        printf("exiting the has_not_been_filled_once\n");
         flush();
         recived_exactly_k_fingers = 1;
         end_window_limit = 0;
@@ -387,7 +434,6 @@ void fill_k_fingerprint(int fingerprint_number) {
       }
     }
     else {
-//      printf("from tail as empty\n");
       cont_shift += finger_tail[start_window_limit];
       pop_tail(fingerprint_number);
       flush();
@@ -407,7 +453,7 @@ void flush() {
 
   const int FINGERPRINT_MAX_DIMENSION = 3;
 
-  int i, number_of_iterations = 0;
+  int number_of_iterations = 0;
   /*n window element * FINGERPRINT_MAX_DIMENSION + number of spaces(n - 1).
     result = FINGERPRINT_MAX_DIMENSION * n + n  - 1 = (FINGERPRINT_MAX_DIMENSION + 1)n - 1. Considering
     than the end string character ('\0'), we have result + 1 =
@@ -419,25 +465,16 @@ void flush() {
   int current_length = 0;
   int current_length2 = 0;
 
-//  printf("start of flush\n");
   strcpy(zero_one_result, "");
   strcpy(fingerprint_result, "");
 
-/*  printf("dealing with the following values\n");
-  printf("about fingerprints\n");
-  printf("%d %d %d %d\n", finger_tail[0], finger_tail[1], finger_tail[2], finger_tail[3]);
-  printf("start_window_limit: %d, end_window_limit: %d, window_dimension = %d\n", start_window_limit, end_window_limit, window_dimension); */
   for (int i = start_window_limit; number_of_iterations < window_dimension; i = (i + 1) % window_dimension) {
-//    printf("i: %d\n", i);
     sprintf(converted_number, "%d ", finger_tail[i]);
     sprintf(converted_bit, "%d ", zero_one_tail[i]);
-    //printf("first section\n");
     current_length += strlen(converted_number);
     strcat(fingerprint_result, converted_number);
-   // printf("second section\n");
     fingerprint_result[current_length] = '\0';   //userful to prevent dirty characters forward program failure
     current_length2 = strlen(zero_one_result);
-   // printf("third section\n");
     strcat(zero_one_result, converted_bit);
     zero_one_result[current_length2 + 3] = '\0'; //userful to prevent dirty characters forward program failure
     number_of_iterations++;
@@ -455,7 +492,6 @@ void initialize_tail() {
   end_window_limit = -1;
   start_window_limit = 0;
   is_one = 0;
-  is_last_fingerprint = 0;
   recived_exactly_k_fingers = 0;
 
   for (i = 0; i < window_dimension; i++) {
