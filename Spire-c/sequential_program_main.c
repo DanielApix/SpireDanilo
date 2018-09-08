@@ -93,7 +93,7 @@ int main() {
   /*Catching input from the user*/
 
   printf("Benvenuto nel programma sequenziale Spire\n\n");
-/*
+
   printf("Fornisca la directory dei file fasta\n");
   root_path = inputString(stdin, 100, '\n');
 
@@ -115,17 +115,17 @@ int main() {
     printf("Fornisca dimensione massima di ciascun fattore\n");
     scanf("%d", &max_fact_length);
   }
-*/
-  fact_choice = 3;
+
+/*  fact_choice = 3;
   strcpy(root_path, "/home/danilo/Scrivania/example-c");
   window_dimension = 4;
   max_fact_length = 30;
   communicate_max_fact_length(max_fact_length);
+*/
 
- /*
   printf("fornisca il numero di elementi per ciascuna finestra per le k-fingerprint\n");
   scanf("%d", &window_dimension);
-*/
+
   time_t m;
   time_t now = time(NULL);
 
