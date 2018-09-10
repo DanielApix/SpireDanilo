@@ -100,12 +100,15 @@ char *substring(char word[], int x, int y) {
 
 int number_of_reads = 0, number_of_factors = 0, factors_length_sum = 0, max_factor_length = 0;
 int number_of_longer_factors = 0, max_fact_len = 0;
+int max_read_length = 0, read_length_cont = 0, min_read_length = 0;
 
 void communicate_max_fact_length(int c) {
     max_fact_len = c;
 }
 
 char *list_to_string(node_t *list, int reverse) { //0 true 1 false
+
+    int factor_length_sum = 0;    
 
     number_of_reads++;
     node_t *current = list;
@@ -150,6 +153,7 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
         if (strcmp(current->factor, "<<") && strcmp(current->factor, ">>")) {
             number_of_factors++;
             int factor_length = strlen(current->factor);
+            factor_length_sum += factor_length;
             factors_length_sum += factor_length;
             if (factor_length > max_factor_length) {
               max_factor_length = factor_length;
@@ -157,7 +161,6 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
             if (factor_length > max_fact_len) {
               number_of_longer_factors++;
             }
-            
         }
         current = current->next;
     }
@@ -175,10 +178,29 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
     }
 
     free_list(list_t);
+
+    read_length_cont += factor_length_sum;
+    if (factor_length_sum > max_read_length)
+      max_read_length = factor_length_sum;
+    if (min_read_length == 0) {
+      min_read_length = factor_length_sum;
+    }
+    else {
+      if (factor_length_sum < min_read_length) {
+        min_read_length = factor_length_sum;
+      }
+    }
     return to_string;
 }
 
 void print_statistics() {
+  printf("\n\nNumero di read: %d\n", number_of_reads);
+  printf("Lunghezza media di read: %d\n", read_length_cont/number_of_reads);
+  printf("Lunghezza massima di read: %d\n", max_read_length);
+  printf("Lunghezza minima di read: %d\n", min_read_length);
+  printf("\n");
+
+  printf("Numbero di fattori: %d\n", number_of_factors);
   printf("Numero medio di fattori per read: %d\n", number_of_factors/number_of_reads);
   printf("Lunghezza media dei fattori: %d\n", factors_length_sum/number_of_factors);
   printf("Lunghezza massima fattori: %d\n", max_factor_length);
