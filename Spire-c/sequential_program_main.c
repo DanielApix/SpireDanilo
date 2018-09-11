@@ -12,6 +12,12 @@
 #include <time.h>
 #include "factorizations.h"
 #include "utils.h"
+#include <assert.h>   //the last 4 are used for testing
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+struct stat st = {0};
 
 int fact_choice;
 
@@ -59,6 +65,7 @@ char *apply_factorization(char *genom);
 void open_towrite_file(char *name, char *fasta_name, char *directory_path); void process_fasta(struct dirent *file_description, char 
 *directory_path); void process_all_fasta_files(struct dirent *subdirectory_description, char* current_path);
 
+
 /* Struttura generale del progamma
 
 int file_aperti
@@ -89,6 +96,8 @@ stampa le statistiche
 */
 
 int main() {
+
+  do_unit_testing();
 
   /*Catching input from the user*/
 
@@ -164,13 +173,14 @@ char *inputString(FILE* fp, size_t size, char ending_character){
     return realloc(str, sizeof(char)*len);
 }
 
-/*Reads an entire stream line until it reaches the \n character and records it in a pointer.
+/*Reads an entire stream line until it reaches the \n character and records it in a pointer. If there is no
+  line to be read or error occurs, NULL is returned.
   if current_size is zero, that is a buffer is considered as it hadn't been previousely allocated, another one will be.
   NOTE: buffer doesn't store the result at the end of the processing.
   pre-condition buffer: buffer must point to a previousely dinamically allocated memory or to NULL
-  pre-condition current_size: must point to a variable whose value >= 0
+  pre-condition current_size: must point to a variable whose value is the dimension of buffer (== 0 if buffer is NULL)
   pre-condition stream: must point to an existing file
-  return: next string read up to the next '\n' reached
+  return: next string read up to the next '\n' reached or NULL if reading fails
 */
 char* safe_fgets(char* buffer, int *current_size, FILE *stream) {
 
@@ -179,6 +189,7 @@ char* safe_fgets(char* buffer, int *current_size, FILE *stream) {
   char* aux_tmp;
   const int STARTING_DIMENSION = 5;
   int actual_dimension;
+  int i;
 
   tmp = NULL;
 
@@ -189,7 +200,6 @@ char* safe_fgets(char* buffer, int *current_size, FILE *stream) {
   if (fgets(buffer, *current_size, stream) == NULL) {
     return NULL;
   }
-
   while (buffer[strlen(buffer) - 1] != '\n') {
 
     *current_size = (*current_size * 2) + 1;
@@ -568,3 +578,200 @@ void initialize_k_finger() {
   finger_tail = calloc(window_dimension, sizeof(int));
 }
 
+void do_unit_testing() {
+  printf("start of unit test\n\n");
+  test_safe_fgets();
+//  test_foreach_element_in();
+}
+
+/*Reads an entire stream line until it reaches the \n character and records it in a pointer. If there is no
+  line to be read or error occurs, NULL is returned.
+  if current_size is zero, that is a buffer is considered as it hadn't been previousely allocated, another one will be.
+  NOTE: buffer doesn't store the result at the end of the processing.
+  pre-condition buffer: buffer must point to a previousely dinamically allocated memory or to NULL
+  pre-condition current_size: must point to a variable whose value is the dimension of buffer (== 0 if buffer is NULL)
+  pre-condition stream: must point to an existing file
+  return: next string read up to the next '\n' reached or NULL if reading fails
+
+char* safe_fgets(char* buffer, int *current_size, FILE *stream) */
+
+void test_safe_fgets() {
+
+  FILE *test_file;
+  char *buffer;
+  int current_size;
+  char *t;
+
+  printf("start of test_safe_fgets test\n\n");
+
+  test_file = fopen("test_file.txt", "w");
+  if (test_file == NULL) {
+    printf("test_safe_fgets: test couldn't be executed cause test file cannot be opened in writing mode\n");
+    printf("error: %s\n", strerror(errno));
+    return;
+  }
+
+  fprintf(test_file, "%s\n%s\n%s", "this is the first sentence", "this is the second one", "this is the third");
+  fclose(test_file);
+
+  test_file = fopen("test_file.txt", "r");
+
+  if (test_file == NULL) {
+    printf("test_safe_fgets: test couldn't be executed cause test file cannot be opened in reading mode\n");
+    printf("error: %s\n", strerror(errno));
+    return;
+  }
+
+  //printf("test conditions: buffer dimension and variable current_size are unsynchronized\n");
+
+  /*buffer = NULL;
+  current_size = 3;
+
+  printf("test case: buffer = NULL and current_dimension = 3\n");
+  buffer = safe_fgets(buffer, &current_size, test_file);
+  assert(strcmp(buffer, "this is the first sentence") == 0);
+  printf("test case passed\n");
+*/
+/*
+  printf("buffer dimension is not current_size\n");
+  printf("buffer dimension is 3 and current_size is 5\n");
+
+  buffer = (char *) malloc(3 * sizeof(char));
+  current_size = 5;
+
+  strcpy(buffer, "ads");
+  buffer = safe_fgets(buffer, &current_size, test_file);
+  assert(strcmp(buffer, "this is the first sentence") == 0);
+
+*/
+  printf("test conditions: buffer dimension and variable current_size are synchronized\n");
+  printf("test case: buffer is NULL and current_size is 0\n");
+
+  buffer = NULL;
+  current_size = 0;
+
+  buffer = safe_fgets(buffer, &current_size, test_file);
+  assert(strcmp(buffer, "this is the first sentence") == 0);
+
+  printf("test case passed\n");
+
+  printf("test case: buffer is of dimension current_size = 26 and second line is going to be read\n");
+  buffer = safe_fgets(buffer, &current_size, test_file);
+  assert(strcmp(buffer, "this is the second one") == 0);
+
+  printf("test case passed\n");
+
+  free(buffer);
+  fclose(test_file);
+
+  test_file = fopen("test_file.txt", "r");
+  if (test_file == NULL) {
+    printf("test_safe_fgets: test couldn't be executed cause test file cannot be opened in writing mode\n");
+    printf("error: %s\n", strerror(errno));
+    return;
+  }
+
+  printf("test conditions: dimension of buffer < dimension of the string to be read\n");
+  printf("test case: buffer is dimension current_size = 5 and the sentence to be read si of dimension 26\n");
+
+  buffer = (char *) malloc(5 * sizeof(char));
+  current_size = 5;
+  buffer = safe_fgets(buffer, &current_size, test_file);
+  assert(strcmp(buffer, "this is the first sentence") == 0);
+
+  printf("test case passed\n");
+
+  free(buffer);
+
+  printf("safe_fgets test passed\n");
+  fclose(test_file);
+  remove("test_file.txt");
+}
+
+/*
+  It scans the directory of the given path and applies the function defined to each contained file or subdirectory
+  passing as argument relevant information as description of the file and it's path.
+  param directory_path: must contain the name of the directory in addition to the location description
+  param apply_function: the first param of this function is referred to the description of the current examined file and
+      the second one to the path of the current examined file
+  pre-condition directory_path: refers to an existing directory location
+  pre-condition apply_function: != NULL
+  post-condition: apply_function is applied to each file or subdirectory in the directory specified by the path
+
+void for_each_element_in(char* directory_path,  void (*apply_function) (struct dirent *, char *)) {
+*/
+
+
+char path_test[255];  //watch out: path can't be more the 100 long or test fails and not because of program to be tested
+int directories_found_test[4] = {0};
+
+void print_names (struct dirent * element, char *path) {
+
+  char* name = element->d_name;
+  char path_to_compare[255];
+  int b;
+
+  b = ((strcmp(name, ".") == 0) || (strcmp(name, "..") == 0) || (strcmp(name, "directory1") == 0) || (strcmp(name, "directory2") == 0));
+
+  strcpy(path_to_compare, path_test);
+  strcat(path_to_compare, "/");
+  strcat(path_to_compare, name);
+  printf("%s\n", path_to_compare);
+  printf("%s\n", path);    //problem is
+  assert(strcmp(path, path_to_compare) == 0);
+  assert(b);
+
+  directories_found_test[0] =  (strcmp(name, ".") == 0);
+  directories_found_test[1] =  (strcmp(name, "..") == 0);
+  directories_found_test[2] =  (strcmp(name, "directory1") == 0);
+  directories_found_test[3] =  (strcmp(name, "directory2") == 0);
+}
+
+void test_foreach_element_in() {
+
+  DIR *file;
+  struct dirent *inner_file;
+
+  printf("Start of for_each_element_in test\n\n");
+  if (stat("directory-test", &st) != -1) {
+    system("rm -r directory-test");
+  }
+
+  mkdir("directory-test", 0700);
+  mkdir("directory-test/directory1", 0700);
+  mkdir("directory-test/directory2", 0700);
+
+  if (getcwd(path_test, 255) == NULL) {
+    printf("for_each_element_in test cannot be run cause it hasn't been possible to find the current path\n");
+    printf("error: %s\n", strerror(errno));
+    return;
+  }
+
+  strcat(path_test, "/");
+  strcat(path_test, "directory-test");
+  strcat(path_test, "/");
+  strcat(path_test, "..");
+
+  file = opendir("/home/danilo/Scrivania/Spire-c/directory-test/directory1");
+  if (file == NULL) {
+    printf("for_each_element test cannot be completed cause created directory1 cannot be open\n");
+    return;
+  }
+  inner_file = readdir(file);
+  if (inner_file == NULL) {
+    printf("for_each_element test cannot be completed cause something gone wrong in catching a file\n");
+    return;
+  }
+  print_names(inner_file, path_test);
+  printf("problem is probably for_each\n");
+
+  for_each_element_in(path_test, print_names);
+
+  assert(directories_found_test[0] != 0);
+  assert(directories_found_test[1] != 0);
+  assert(directories_found_test[2] != 0);
+  assert(directories_found_test[3] != 0);
+
+
+  system("rm -r directory-test");
+}
