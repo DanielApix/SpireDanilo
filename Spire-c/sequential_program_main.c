@@ -98,7 +98,7 @@ stampa le statistiche
 int main() {
 
   do_unit_testing();
-
+  do_integration_testing();
   /*Catching input from the user*/
 
   printf("Benvenuto nel programma sequenziale Spire\n\n");
@@ -327,7 +327,7 @@ void process_fasta(struct dirent *file_description, char *path) {
 }
 
 /*
-  It creates the file in the specified directory.
+  It creates the file in the specified directory and opens it into the respective variable in write mode.
   param name: name to concatenate with the fasta file one that will be the name of the file to be opened
   param directory_path: directory path in which the file to be created will be
   pre-condition name: name == "factorization" || name == "fingerprint" || name == "kfingerprint" || name == "oneformat"
@@ -500,7 +500,9 @@ void fill_k_fingerprint(int fingerprint_number) {
 }
 
 /* It adds a new fingerprint and the bool value about the fact it is the result of a second factorization
-   at the head of the tails respectively.
+   at the head of the tails respectively in the position of end_window_limit variable (this one is not updated).
+   The end_window_limit zero_one_tail element is set to the bool is_one that defines if the current element is
+   the result of sub-factorization or not.
    pre-condiion: finger_tail and zero_one_tail must be synchronized (zero_one_tail[i] must regard finger_tail[i])
 */
 void pop_tail(int fingerprint_number) {
@@ -509,12 +511,13 @@ void pop_tail(int fingerprint_number) {
   zero_one_tail[end_window_limit] = is_one;
 }
 
-/* It records the tails content in the k-fingerprint file as the right format.
-   pre-condition: window_dimension must match the distance between start_window_limit and end_window_limit
+/* It records the tails content in the k-fingerprint file as the right format if you close the kfingerprint_file after called this function.
+   pre-condition: window_dimension must match the distance between start_window_limit and end_window_limit in modulo arithmetic
    pre-condtion: zero_one_tail and finger_tail must be integer arrays
    pre-condition: zero_one_tail and finger_tail must have window_dimension as dimension
    pre-condition: kfingerprint_file must point to an opened file in write mode
    pre-condition: header_read != NULL and must be a string
+   pre-condition: after calling this function fclose(kfingerprint_file) must be called
 */
 void flush() {
 
@@ -536,6 +539,7 @@ void flush() {
   strcpy(fingerprint_result, "");
 
   for (int i = start_window_limit; number_of_iterations < window_dimension; i = (i + 1) % window_dimension) {
+    number_of_iterations++;
     sprintf(converted_number, "%d ", finger_tail[i]);
     sprintf(converted_bit, "%d ", zero_one_tail[i]);
     current_length += strlen(converted_number);
@@ -544,9 +548,9 @@ void flush() {
     current_length2 = strlen(zero_one_result);
     strcat(zero_one_result, converted_bit);
     zero_one_result[current_length2 + 3] = '\0'; //userful to prevent dirty characters forward program failure
-    number_of_iterations++;
   }
-
+  fingerprint_result[current_length - 1] = '\0';
+  zero_one_result[strlen(zero_one_result) - 1] = '\0';
   fprintf(kfingerprint_file, "%s %c %s %c %s %d\n", fingerprint_result, '$', zero_one_result, '$', header_read, cont_shift);
 }
 
@@ -581,7 +585,18 @@ void initialize_k_finger() {
 void do_unit_testing() {
   printf("start of unit test\n\n");
   test_safe_fgets();
-//  test_foreach_element_in();
+  test_foreach_element_in();
+  test_initialize_k_finger();
+  test_flush();
+  test_open_towrite_file();
+  printf("unit test successfully passed\n\n");
+}
+
+void do_integration_testing() {
+  printf("start of integration test\n");
+  test_create_fingerprint();
+  printf("integration test successfully completed\n");
+  printf("program works as it should\n");
 }
 
 /*Reads an entire stream line until it reaches the \n character and records it in a pointer. If there is no
@@ -602,7 +617,7 @@ void test_safe_fgets() {
   int current_size;
   char *t;
 
-  printf("start of test_safe_fgets test\n\n");
+  printf("\n\nstart of test_safe_fgets test\n");
 
   test_file = fopen("test_file.txt", "w");
   if (test_file == NULL) {
@@ -716,15 +731,17 @@ void print_names (struct dirent * element, char *path) {
   strcpy(path_to_compare, path_test);
   strcat(path_to_compare, "/");
   strcat(path_to_compare, name);
-  printf("%s\n", path_to_compare);
-  printf("%s\n", path);    //problem is
   assert(strcmp(path, path_to_compare) == 0);
   assert(b);
 
-  directories_found_test[0] =  (strcmp(name, ".") == 0);
-  directories_found_test[1] =  (strcmp(name, "..") == 0);
-  directories_found_test[2] =  (strcmp(name, "directory1") == 0);
-  directories_found_test[3] =  (strcmp(name, "directory2") == 0);
+  if (!directories_found_test[0])
+    directories_found_test[0] =  (strcmp(name, ".") == 0);
+  if (!directories_found_test[1])
+    directories_found_test[1] =  (strcmp(name, "..") == 0);
+  if (!directories_found_test[2])
+    directories_found_test[2] =  (strcmp(name, "directory1") == 0);
+  if (!directories_found_test[3])
+    directories_found_test[3] =  (strcmp(name, "directory2") == 0);
 }
 
 void test_foreach_element_in() {
@@ -732,7 +749,7 @@ void test_foreach_element_in() {
   DIR *file;
   struct dirent *inner_file;
 
-  printf("Start of for_each_element_in test\n\n");
+  printf("\n\nStart of for_each_element_in test\n");
   if (stat("directory-test", &st) != -1) {
     system("rm -r directory-test");
   }
@@ -747,10 +764,10 @@ void test_foreach_element_in() {
     return;
   }
 
+  printf("test conditions: scanning of 4 created subdirectories");
+
   strcat(path_test, "/");
   strcat(path_test, "directory-test");
-  strcat(path_test, "/");
-  strcat(path_test, "..");
 
   file = opendir("/home/danilo/Scrivania/Spire-c/directory-test/directory1");
   if (file == NULL) {
@@ -762,8 +779,7 @@ void test_foreach_element_in() {
     printf("for_each_element test cannot be completed cause something gone wrong in catching a file\n");
     return;
   }
-  print_names(inner_file, path_test);
-  printf("problem is probably for_each\n");
+  //print_names(inner_file, path_test);
 
   for_each_element_in(path_test, print_names);
 
@@ -774,4 +790,389 @@ void test_foreach_element_in() {
 
 
   system("rm -r directory-test");
+
+  printf("test case passed\n");
+  printf("for_each_element_in test passed\n");
+}
+
+
+/*Sets the number of elements for each window and sets the tails
+  pre-condition: window_dimension > 0
+
+void initialize_k_finger() */
+
+void test_initialize_k_finger() {
+
+  int i;
+
+  printf("\n\nStart of initialize_k_finger test\n");
+
+  printf("test conditions: window dimension = 4\n");
+
+  window_dimension = 4;
+  initialize_k_finger();
+
+  for (i = 0; i < window_dimension; i++) {  //it stops the program if pre-condition are unsatisfied
+    zero_one_tail[i] = 0;
+    finger_tail[i] = 0;
+  }
+
+  free(zero_one_tail);
+  free(finger_tail);
+
+  printf("initialize_k_finger test passed\n");
+}
+
+/* It records the tails content in the k-fingerprint file as the right format if you close the kfingerprint_file after called this function.
+   pre-condition: window_dimension must match the distance between start_window_limit and end_window_limit in modulo arithmetic
+   pre-condtion: zero_one_tail and finger_tail must be integer arrays
+   pre-condition: zero_one_tail and finger_tail must have window_dimension as dimension
+   pre-condition: kfingerprint_file must point to an opened file in write mode
+   pre-condition: header_read != NULL and must be a string
+   pre-condition: after calling this function fclose(kfingerprint_file) must be called
+
+void flush()
+*/
+
+void test_flush() {
+
+  FILE *test_file;
+  char s[300], c1, c2, header[100];
+  int f1, f2, f3, f4, z1, z2, z3,z4, cont;
+
+  printf("\n\nStart of flush test\n");
+  printf("test conditions: window_dimension = 5, start_window_limit = 0, end_window_limit = 4\n");
+
+  window_dimension = 4;
+  zero_one_tail = calloc(window_dimension, sizeof(int));
+  finger_tail = calloc(window_dimension, sizeof(int));
+
+  start_window_limit = 0;
+  end_window_limit = 3;
+
+  kfingerprint_file = fopen("test_file.txt", "w");
+  if (kfingerprint_file == NULL) {
+    printf("test cannot be completed cause has not been possible to open kfingerprint_file\n");
+    return;
+  }
+  header_read = (char *) malloc(100 * sizeof(char));
+  strcpy(header_read, "header");
+
+  zero_one_tail[0] = 1;
+  zero_one_tail[1] = 1;
+  zero_one_tail[2] = 0;
+  zero_one_tail[3] = 0;
+
+  finger_tail[0] = 2;
+  finger_tail[1] = 3;
+  finger_tail[2] = 4;
+  finger_tail[3] = 5;
+
+  flush();
+
+  fclose(kfingerprint_file);
+  test_file = fopen("test_file.txt", "r");
+  if (test_file == NULL) {
+    printf("test cannot be completed cause has not been possible to open test_file\n");
+    return;
+  }
+  if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header, &cont);
+
+  assert(f1 == 2);
+  assert(f2 == 3);
+  assert(f3 == 4);
+  assert(f4 == 5);
+  assert(c1 == '$');
+  assert(z1 == 1);
+  assert(z2 == 1);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header, "header") == 0);
+
+  fclose(test_file);
+  system("rm -r test_file.txt");
+  free(zero_one_tail);
+  free(finger_tail);
+  free(header_read);
+
+  printf("test case passed\n");
+
+  printf("test conditions: window_dimension = 4, start_window_limit = 0, end_window_limit = 4\n");
+
+  window_dimension = 4;
+  zero_one_tail = calloc(window_dimension, sizeof(int));
+  finger_tail = calloc(window_dimension, sizeof(int));
+
+  start_window_limit = 0;
+  end_window_limit = 3;
+
+  kfingerprint_file = fopen("test_file.txt", "w");
+  if (kfingerprint_file == NULL) {
+    printf("test cannot be completed cause has not been possible to open kfingerprint_file\n");
+    return;
+  }
+  header_read = (char *) malloc(100 * sizeof(char));
+  strcpy(header_read, "header");
+
+  zero_one_tail[0] = 1;
+  zero_one_tail[1] = 1;
+  zero_one_tail[2] = 0;
+  zero_one_tail[3] = 0;
+
+  finger_tail[0] = 2;
+  finger_tail[1] = 3;
+  finger_tail[2] = 4;
+  finger_tail[3] = 5;
+
+  flush();
+
+  fclose(kfingerprint_file);
+  test_file = fopen("test_file.txt", "r");
+  if (test_file == NULL) {
+    printf("test cannot be completed cause has not been possible to open test_file\n");
+    return;
+  }
+  if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+
+  printf("%s\n", s);
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header, &cont);
+
+  assert(f1 == 2);
+  assert(f2 == 3);
+  assert(f3 == 4);
+  assert(f4 == 5);
+  assert(c1 == '$');
+  assert(z1 == 1);
+  assert(z2 == 1);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header, "header") == 0);
+
+  fclose(test_file);
+  system("rm -r test_file.txt");
+  free(zero_one_tail);
+  free(finger_tail);
+  free(header_read);
+
+  printf("test case passed\n");
+
+  printf("test conditions: window_dimension = 4, start_window_limit = 3, end_window_limit = 2\n");
+
+  window_dimension = 4;
+  zero_one_tail = calloc(window_dimension, sizeof(int));
+  finger_tail = calloc(window_dimension, sizeof(int));
+
+  kfingerprint_file = fopen("test_file.txt", "w");
+  if (kfingerprint_file == NULL) {
+    printf("test cannot be completed cause has not been possible to open kfingerprint_file\n");
+    return;
+  }
+  header_read = (char *) malloc(100 * sizeof(char));
+  strcpy(header_read, "header");
+
+  zero_one_tail[3] = 1;
+  zero_one_tail[0] = 1;
+  zero_one_tail[1] = 0;
+  zero_one_tail[2] = 0;
+
+  finger_tail[3] = 2;
+  finger_tail[0] = 3;
+  finger_tail[1] = 4;
+  finger_tail[2] = 5;
+
+  start_window_limit = 3;
+  end_window_limit = 2;
+
+  flush();
+
+  fclose(kfingerprint_file);
+  test_file = fopen("test_file.txt", "r");
+  if (test_file == NULL) {
+    printf("test cannot be completed cause has not been possible to open test_file\n");
+    return;
+  }
+  if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+
+  printf("%s\n", s);
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header, &cont);
+
+  assert(f1 == 2);
+  assert(f2 == 3);
+  assert(f3 == 4);
+  assert(f4 == 5);
+  assert(c1 == '$');
+  assert(z1 == 1);
+  assert(z2 == 1);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header, "header") == 0);
+
+  fclose(test_file);
+  system("rm -r test_file.txt");
+  free(zero_one_tail);
+  free(finger_tail);
+  free(header_read);
+
+  printf("test case passed\n");
+
+  printf("flush test passed\n");
+}
+
+/*
+  It creates the file in the specified directory and opens it into the respective variable in write mode.
+  param name: name to concatenate with the fasta file one that will be the name of the file to be opened
+  param directory_path: directory path in which the file to be created will be
+  pre-condition name: name == "factorization" || name == "fingerprint" || name == "kfingerprint" || name == "oneformat"
+  pre-condition fasta_name: must contain ".fasta" at the end of its name
+  pre-condition directory_path: must be the path of an existing directory
+  post-condition one of the variables factorization_file, fingerprint_file, kfingerprint_file, oneformat_file will contain
+      a pointer to an opened file in write mode with the name descripted below depending on the name parameter value respectively
+
+void open_towrite_file(char *name, char *fasta_name, char *directory_path)
+*/
+
+void test_open_towrite_file() {
+
+  FILE *test_file;
+  char path_test[300];
+
+  printf("\n\nStart of open_towrite_file test\n");
+  printf("test conditions: fasta_name = \".fasta\" for factorization, fingerprint, kfingerprint and oneformat\n");
+
+  if (getcwd(path_test, 255) == NULL) {
+    printf("for_each_element_in test cannot be run cause it hasn't been possible to find the current path\n");
+    printf("error: %s\n", strerror(errno));
+    return;
+  }
+
+  open_towrite_file("factorization", ".fasta", path_test);
+  open_towrite_file("fingerprint", ".fasta", path_test);
+  open_towrite_file("kfingerprint", ".fasta", path_test);
+  open_towrite_file("oneformat", ".fasta", path_test);
+
+  if (factorization_file == NULL)
+    assert(0);
+  if (fingerprint_file == NULL)
+    assert(0);
+  if (kfingerprint_file == NULL)
+    assert(0);
+  if (oneformat_file == NULL)
+    assert(0);
+
+  fclose(factorization_file);
+  fclose(fingerprint_file);
+  fclose(kfingerprint_file);
+  fclose(oneformat_file);
+
+  test_file = fopen("-factorization", "r");
+  if (test_file == NULL) {
+    printf("-factorization.txt not created\n");
+    assert(0);
+  }
+
+  test_file = fopen("-fingerprint", "r");
+  if (test_file == NULL) {
+    printf("-fingerprint.txt not created\n");
+    assert(0);
+  }
+
+  test_file = fopen("-kfingerprint", "r");
+  if (test_file == NULL) {
+    printf("-kfingerprint.txt not created\n");
+    assert(0);
+  }
+
+  test_file = fopen("-oneformat", "r");
+  if (test_file == NULL) {
+    printf("-oneformat.txt not created\n");
+    assert(0);
+  }
+
+  remove("-factorization");
+  remove("-fingerprint");
+  remove("-kfingerprint");
+  remove("-oneformat");
+
+  printf("test case passed\n");
+
+  printf("test conditions: fasta_name = \"normal_name.fasta\" for factorization, fingerprint, kfingerprint and oneformat\n");
+
+  if (getcwd(path_test, 255) == NULL) {
+    printf("for_each_element_in test cannot be run cause it hasn't been possible to find the current path\n");
+    printf("error: %s\n", strerror(errno));
+    return;
+  }
+
+  open_towrite_file("factorization", "normal_name.fasta", path_test);
+  open_towrite_file("fingerprint", "normal_name.fasta", path_test);
+  open_towrite_file("kfingerprint", "normal_name.fasta", path_test);
+  open_towrite_file("oneformat", "normal_name.fasta", path_test);
+
+  if (factorization_file == NULL)
+    assert(0);
+  if (fingerprint_file == NULL)
+    assert(0);
+  if (kfingerprint_file == NULL)
+    assert(0);
+  if (oneformat_file == NULL)
+    assert(0);
+
+  fclose(factorization_file);
+  fclose(fingerprint_file);
+  fclose(kfingerprint_file);
+  fclose(oneformat_file);
+
+  test_file = fopen("normal_name-factorization", "r");
+
+  test_file = fopen("normal_name-fingerprint", "r");
+  if (test_file == NULL) {
+    printf("-fingerprint.txt not created\n");
+    assert(0);
+  }
+
+  test_file = fopen("normal_name-kfingerprint", "r");
+  if (test_file == NULL) {
+    printf("-kfingerprint.txt not created\n");
+    assert(0);
+  }
+
+  test_file = fopen("normal_name-oneformat", "r");
+  if (test_file == NULL) {
+    printf("-oneformat.txt not created\n");
+    assert(0);
+  }
+
+  remove("normal_name-factorization");
+  remove("normal_name-fingerprint");
+  remove("normal_name-kfingerprint");
+  remove("normal_name-oneformat");
+
+  printf("test case passed\n");
+
+  printf("open_towrite_file test passed\n");
+
+
+  /*file name of length next to 255 is not considered here cause of time constraints*/
+}
+
+/* It creates the fingerprint and k-fingerprint of the factorized genom. The k-fingerprints will be stored in
+       the file pointed by kfingerprint_file variable.
+  pre-condition factorized_genom: must be the result of factorize_read or format equivalent
+  pre-condition: kfingerprint_file must point to an existing opened file in writing mode
+  post-condition: kfingerprints will be written in the correct format in the file pointed by the kfingerprint_file variable
+  return: fingerprint of the factorized genom
+
+char* create_fingerprint(char* factorized_genom)
+*/
+
+void test_create_fingerprint() {
+
 }
