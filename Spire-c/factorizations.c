@@ -14,6 +14,25 @@ int index_in_alphabet(char t, char typ_alphabet_list[]) {
 
 // ---------------------- CFL -----------------------------------------------------------------
 // CFL - Lyndon factorization - Duval's algorithm
+
+int number_of_items = 0;
+
+int get_number_of_factors() {
+
+  int number = number_of_items;
+  number_of_items = 0;
+  return number;
+}
+
+int number_of_delimeters = 0;
+
+int get_number_of_delimeters() {
+
+  int number = number_of_delimeters;
+  number_of_delimeters = 0;
+  return number;
+}
+
 node_t *CFL(char word[]) {
 
     //CFL Duval's algorithm.
@@ -33,6 +52,7 @@ node_t *CFL(char word[]) {
                 	node->factor = substring(word, k, k + j - i);
                 	node->next = current_pointer;
                 	current_pointer = node;
+                        number_of_items++;
                     k = k + j - i;
                 }
                 break;
@@ -480,6 +500,7 @@ void compute_icfl_recursive(char word[], node_t **curr_pointer_icfl) {
         char *w = current_bre_quad->factor;
         node_t * icfl_node = malloc(sizeof(node_t));
         icfl_node->factor = substring(w, 0, strlen(w) - 1);
+        number_of_items++;
 
         if (*curr_pointer_icfl == NULL) {
         	 icfl_node->next = NULL;
@@ -502,6 +523,7 @@ void compute_icfl_recursive(char word[], node_t **curr_pointer_icfl) {
         	node_t * icfl_node = malloc(sizeof(node_t));
         	icfl_node->factor = malloc(strlen(current_bre_quad->factor) + 1);
         	strcpy(icfl_node->factor, current_bre_quad->factor);
+		number_of_items++;
 
         	if (*curr_pointer_icfl == NULL) {
         		icfl_node->next = NULL;
@@ -517,6 +539,7 @@ void compute_icfl_recursive(char word[], node_t **curr_pointer_icfl) {
             strcpy((*curr_pointer_icfl)->factor, current_bre_quad->factor);
             strcat((*curr_pointer_icfl)->factor, factor);
             free(factor);
+	    number_of_items++;
         }
         free(fact1_fact2);
         fact1_fact2 = NULL;
@@ -634,6 +657,7 @@ node_t *CFL_icfl(char word[], int C) {
 						strcpy(cfl_node->factor, w);
 						cfl_node->next = CFL_list;
 						CFL_list = cfl_node;
+						number_of_items++;
 					} else {
 						node_t *ICFL_list = ICFL_recursive(w);
 						//Insert << to indicate the begin of the subdecomposition of w
@@ -642,7 +666,8 @@ node_t *CFL_icfl(char word[], int C) {
 						strcpy(start_delimiter->factor, "<<");
 						start_delimiter->next = CFL_list;
 						CFL_list = start_delimiter;
-
+						number_of_delimeters++;	//improper name: it is about delimeter. Just a quick fix
+						number_of_items++;
 						while(ICFL_list != NULL) {
 							node_t *tmp = ICFL_list;
 							ICFL_list = ICFL_list->next;
@@ -656,6 +681,8 @@ node_t *CFL_icfl(char word[], int C) {
 						strcpy(end_delimiter->factor, ">>");
 						end_delimiter->next = CFL_list;
 						CFL_list = end_delimiter;
+						number_of_delimeters++;
+						number_of_items++;
 					}
 					k = k + j - i;
 					free(w);
@@ -753,6 +780,7 @@ node_t *ICFL_cfl(char word[], int C) {
 				ICFL_cfl_list = malloc(sizeof(node_t));
 				ICFL_cfl_list->factor = malloc(strlen(track_pointer_icfl->factor) + 1);
 				strcpy(ICFL_cfl_list->factor, track_pointer_icfl->factor);
+   				number_of_items++;
 			    ICFL_cfl_list->next = NULL;
 			    track_pointer_ICFL_cfl = ICFL_cfl_list;
 			} else {
@@ -762,6 +790,7 @@ node_t *ICFL_cfl(char word[], int C) {
 				new_node->next = NULL;
 				track_pointer_ICFL_cfl->next = new_node;
 				track_pointer_ICFL_cfl = track_pointer_ICFL_cfl->next;
+				number_of_items++;
 			}
 		} else {
 			node_t *CFL_list = CFL(track_pointer_icfl->factor);
@@ -769,6 +798,7 @@ node_t *ICFL_cfl(char word[], int C) {
 			node_t *start_delimiter = malloc(sizeof(node_t));
 			start_delimiter->factor = malloc(3);
 			strcpy(start_delimiter->factor, "<<");
+			number_of_items += 3;
 			if (track_pointer_ICFL_cfl == NULL) {
 				ICFL_cfl_list = start_delimiter;
 				track_pointer_ICFL_cfl = start_delimiter;
@@ -776,12 +806,15 @@ node_t *ICFL_cfl(char word[], int C) {
 				track_pointer_ICFL_cfl->next = start_delimiter;
 				track_pointer_ICFL_cfl = track_pointer_ICFL_cfl->next;
 			}
+			number_of_delimeters++;
+			number_of_items++;
 
 			//Insert << to indicate the begin of the subdecomposition of w
 			node_t *end_delimiter = malloc(sizeof(node_t));
 			end_delimiter->factor = malloc(3);
 			strcpy(end_delimiter->factor, ">>");
-
+			number_of_delimeters++;
+			number_of_items++;
 			track_pointer_ICFL_cfl = end_delimiter;
 
 			while(CFL_list->next != NULL) {

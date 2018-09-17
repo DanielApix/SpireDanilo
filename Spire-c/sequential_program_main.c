@@ -41,6 +41,17 @@ int cont_shift = 0;  //number of shitfts from the start of the read dealing with
 int has_not_been_filled_once = 1;  //if it hasn't been filled at least once for the current read
 int recived_exactly_k_fingers = 0;
 /**/
+time_t time_spent_to_read_file = 0;
+time_t time_spent_to_write_in_file = 0;
+
+
+/*necessary to set the dimension of the string returned by list_to_string (efficiency reasons)*/
+int get_number_of_factors();
+int get_number_of_delimeters();
+void set_number_of_elements(int num);
+void set_read_dimension(int value);
+void communicate_max_fact_length(int c);
+void print_statistics();
 
 char *inputString(FILE* fp, size_t size, char ending_character);
 char* safe_fgets(char* buffer, int *current_size, FILE *stream);
@@ -65,6 +76,17 @@ char *apply_factorization(char *genom);
 void open_towrite_file(char *name, char *fasta_name, char *directory_path); void process_fasta(struct dirent *file_description, char 
 *directory_path); void process_all_fasta_files(struct dirent *subdirectory_description, char* current_path);
 
+void test_safe_fgets();
+void test_foreach_element_in();
+void test_initialize_k_finger();
+void test_flush();
+void test_open_towrite_file();
+void do_unit_testing();
+
+void  test_fill_k_finger();
+void test_create_fingerprint();
+void test_process_fasta();
+void do_integration_testing();
 
 /* Struttura generale del progamma
 
@@ -189,7 +211,6 @@ char* safe_fgets(char* buffer, int *current_size, FILE *stream) {
   char* aux_tmp;
   const int STARTING_DIMENSION = 5;
   int actual_dimension;
-  int i;
 
   tmp = NULL;
 
@@ -198,6 +219,7 @@ char* safe_fgets(char* buffer, int *current_size, FILE *stream) {
     *current_size = STARTING_DIMENSION;
   }
   if (fgets(buffer, *current_size, stream) == NULL) {
+    *current_size = 0;
     return NULL;
   }
   while (buffer[strlen(buffer) - 1] != '\n') {
@@ -275,11 +297,16 @@ void process_all_fasta_files(struct dirent *subdirectory_description, char* curr
 
 /*If the file descripted is a fasta file, factorization, fingerprint, kfingerprint and the one format of the first three
   will be created and saved in the same directory containing the file to be processed
-  pre-condition file_description: must descript an existing file
+  pre-condition file_description: must descript an existing file with reads that respect the correct format
   pre-condition path: must refer to the descripted file
   pre-condition: current_header_size and current_genom_size must be 0
+  pre-condition: initialize_tails() and initialize_k_finger() must be called before calling this function.
+  pre-condition: zero_one_tail and finger_tail must have window_dimension as dimension
+  pre-condition: fact_choice >= 1 || fact_choice <= 4
+
   post-condition: given the name nam of the fasta file without ".fasta" at the end, nam-factorization.txt, nam-fingerprint.txt,
-      nam-kfingerprint, nam-oneformat.txt will be created in the same directory of the fasta file with the respective output inside*/
+      nam-kfingerprint, nam-oneformat.txt will be created in the same directory of the fasta file with the respective output inside
+*/
 void process_fasta(struct dirent *file_description, char *path) {
 
   char directory_path[100];
@@ -287,12 +314,16 @@ void process_fasta(struct dirent *file_description, char *path) {
   char *result1;
   char *result2;
   char filename[255];
+  /*used to not loose the allocated memory in case NULL is returned by safe_fgets cause EOF has been reached*/
+  char *header_read_beckup;
+  int current_header_size_beckup;
+  /**/
 
   if (strlen(file_description->d_name) > strlen(".fasta")) {
     if (strstr(file_description->d_name, ".fasta") != NULL) {   //if it has .fasta extention
       directory_path[strlen(path) - strlen(file_description->d_name) - 1] = '\0';
       strncpy(directory_path, path, strlen(path) - strlen(file_description->d_name) - 1);
-      strcpy(filename, file_description->d_name);  //useful cause somethimes file_description->d_name strangely changes in opening files
+      strcpy(filename, file_description->d_name);  //useful cause sometimes file_description->d_name strangely changes in opening files
       open_towrite_file("factorization", filename, directory_path);
       open_towrite_file("fingerprint", filename, directory_path);
       open_towrite_file("kfingerprint", filename, directory_path);
@@ -309,17 +340,17 @@ void process_fasta(struct dirent *file_description, char *path) {
           fprintf(factorization_file, "%s\n%s\n", header_read, result1);
           result2 = create_fingerprint(result1);
           fprintf(fingerprint_file, "%s %s\n", header_read, result2);
-          fprintf(oneformat_file, "%s %c %s %c %s\n", header_read, '$', result2, '$', result1);
+          fprintf(oneformat_file, "%s %c %s %c %s\n", header_read, '$', result2, '$', result1); 
+          header_read_beckup = header_read;
+          current_header_size_beckup = current_header_size; 
         }
-      }
-  //    if (factorization_file == NULL)
-  //      printf("factorization_file lost\n");
+        header_read = header_read_beckup;
+        current_header_size = current_header_size_beckup;  
+        }
       fclose(factorization_file);
       fclose(fingerprint_file);
       fclose(kfingerprint_file);
       fclose(oneformat_file);
-      current_header_size = 0;
-      current_genom_size = 0;
     }
     else {
       printf("Non è stato possibile aprire il file fasta %s\nErrore: %s\n", file_description->d_name, strerror(errno));
@@ -375,6 +406,8 @@ char *apply_factorization(char *genom) {
 
   node_t *factorized_genom;
   int second_parameter_value;
+  char* result;
+  int number_of_factors;
 
   switch (fact_choice) {
     case 1:
@@ -394,11 +427,23 @@ char *apply_factorization(char *genom) {
       second_parameter_value = 1;
       break;
   }
+  
+  /*needed to set the size of the string returned by list_to_string*/
+  get_number_of_delimeters();
+  number_of_factors = get_number_of_factors();
+  set_number_of_elements(number_of_factors);
+  set_number_of_elements(strlen(genom));
+  /**/
 
-  return list_to_string(factorized_genom, second_parameter_value);
+  result = list_to_string(factorized_genom, second_parameter_value);
+
+  number_of_factors = get_number_of_factors();
+  set_number_of_elements(number_of_factors);
+
+  return result;
 }
 
-/*
+
 /* It creates the fingerprint and k-fingerprint of the factorized genom. The k-fingerprints will be stored in
        the file pointed by kfingerprint_file variable.
   pre-condition factorized_genom: must be the result of factorize_read or format equivalent
@@ -602,7 +647,7 @@ void initialize_k_finger() {
 }
 
 void do_unit_testing() {
-  printf("start of unit test\n\n");
+  printf("start of unit test\n");
   test_safe_fgets();
   test_foreach_element_in();
   test_initialize_k_finger();
@@ -615,9 +660,9 @@ void do_integration_testing() {
   printf("start of integration test\n");
   test_fill_k_finger();
   test_create_fingerprint();
-  test_process_fasta();
-  printf("\nintegration test successfully completed\n");
-  printf("\nprogram works as it should\n");
+  //test_process_fasta();
+  //test of process_all_fasta_files has not been accomplished cause of time constraints
+  printf("\nintegration test successfully completed\n\n");
   printf("running the program...\n\n");
 }
 
@@ -637,7 +682,6 @@ void test_safe_fgets() {
   FILE *test_file;
   char *buffer;
   int current_size;
-  char *t;
 
   printf("\n\nstart of test_safe_fgets test\n");
 
@@ -645,7 +689,7 @@ void test_safe_fgets() {
   if (test_file == NULL) {
     printf("test_safe_fgets: test couldn't be executed cause test file cannot be opened in writing mode\n");
     printf("error: %s\n", strerror(errno));
-    return;
+    exit(1);
   }
 
   fprintf(test_file, "%s\n%s\n%s", "this is the first sentence", "this is the second one", "this is the third");
@@ -656,7 +700,7 @@ void test_safe_fgets() {
   if (test_file == NULL) {
     printf("test_safe_fgets: test couldn't be executed cause test file cannot be opened in reading mode\n");
     printf("error: %s\n", strerror(errno));
-    return;
+    exit(1);
   }
 
   //printf("test conditions: buffer dimension and variable current_size are unsynchronized\n");
@@ -705,7 +749,7 @@ void test_safe_fgets() {
   if (test_file == NULL) {
     printf("test_safe_fgets: test couldn't be executed cause test file cannot be opened in writing mode\n");
     printf("error: %s\n", strerror(errno));
-    return;
+    exit(1);
   }
 
   printf("test conditions: dimension of buffer < dimension of the string to be read\n");
@@ -783,7 +827,7 @@ void test_foreach_element_in() {
   if (getcwd(path_test, 255) == NULL) {
     printf("for_each_element_in test cannot be run cause it hasn't been possible to find the current path\n");
     printf("error: %s\n", strerror(errno));
-    return;
+    exit(1);
   }
 
   printf("test conditions: scanning of 4 created subdirectories");
@@ -794,12 +838,12 @@ void test_foreach_element_in() {
   file = opendir("/home/danilo/Scrivania/Spire-c/directory-test/directory1");
   if (file == NULL) {
     printf("for_each_element test cannot be completed cause created directory1 cannot be open\n");
-    return;
+    exit(1);
   }
   inner_file = readdir(file);
   if (inner_file == NULL) {
     printf("for_each_element test cannot be completed cause something gone wrong in catching a file\n");
-    return;
+    exit(1);
   }
   //print_names(inner_file, path_test);
 
@@ -875,7 +919,7 @@ void test_flush() {
   kfingerprint_file = fopen("test_file.txt", "w");
   if (kfingerprint_file == NULL) {
     printf("test cannot be completed cause has not been possible to open kfingerprint_file\n");
-    return;
+    exit(1);
   }
   header_read = (char *) malloc(100 * sizeof(char));
   strcpy(header_read, "header");
@@ -896,7 +940,7 @@ void test_flush() {
   test_file = fopen("test_file.txt", "r");
   if (test_file == NULL) {
     printf("test cannot be completed cause has not been possible to open test_file\n");
-    return;
+    exit(1);
   }
   if(fgets(s, 300, test_file) == NULL)
     assert(0);
@@ -935,7 +979,7 @@ void test_flush() {
   kfingerprint_file = fopen("test_file.txt", "w");
   if (kfingerprint_file == NULL) {
     printf("test cannot be completed cause has not been possible to open kfingerprint_file\n");
-    return;
+    exit(1);
   }
   header_read = (char *) malloc(100 * sizeof(char));
   strcpy(header_read, "header");
@@ -956,7 +1000,7 @@ void test_flush() {
   test_file = fopen("test_file.txt", "r");
   if (test_file == NULL) {
     printf("test cannot be completed cause has not been possible to open test_file\n");
-    return;
+    exit(1);
   }
   if(fgets(s, 300, test_file) == NULL)
     assert(0);
@@ -993,7 +1037,7 @@ void test_flush() {
   kfingerprint_file = fopen("test_file.txt", "w");
   if (kfingerprint_file == NULL) {
     printf("test cannot be completed cause has not been possible to open kfingerprint_file\n");
-    return;
+    exit(1);
   }
   header_read = (char *) malloc(100 * sizeof(char));
   strcpy(header_read, "header");
@@ -1017,7 +1061,7 @@ void test_flush() {
   test_file = fopen("test_file.txt", "r");
   if (test_file == NULL) {
     printf("test cannot be completed cause has not been possible to open test_file\n");
-    return;
+    exit(1);
   }
   if(fgets(s, 300, test_file) == NULL)
     assert(0);
@@ -1071,7 +1115,7 @@ void test_open_towrite_file() {
   if (getcwd(path_test, 255) == NULL) {
     printf("for_each_element_in test cannot be run cause it hasn't been possible to find the current path\n");
     printf("error: %s\n", strerror(errno));
-    return;
+    exit(1);
   }
 
   open_towrite_file("factorization", ".fasta", path_test);
@@ -1129,7 +1173,7 @@ void test_open_towrite_file() {
   if (getcwd(path_test, 255) == NULL) {
     printf("for_each_element_in test cannot be run cause it hasn't been possible to find the current path\n");
     printf("error: %s\n", strerror(errno));
-    return;
+    exit(1);
   }
 
   open_towrite_file("factorization", "normal_name.fasta", path_test);
@@ -1185,7 +1229,7 @@ void test_open_towrite_file() {
 }
 
 
-/*
+
 /*It adds a new element to the fingerprint tail and in case it is full or it isn't and the fingerprints are ended,
       writes the next kfingerprint line.
   param fingerprint_number: if it is -2, all the fingerprints have been created and the tail must deal with that,
@@ -1219,7 +1263,7 @@ void test_fill_k_finger() {
   kfingerprint_file = fopen("test_file", "w");
   if (kfingerprint_file == NULL) {
     printf("test couldn't be completed cause kfingerprint file cannot be opened in writing mode\n");
-    return;
+    exit(1);
   }
 
   header_read = (char *) malloc(100 * sizeof(char));
@@ -1241,7 +1285,7 @@ void test_fill_k_finger() {
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   if(fgets(s, 300, test_file) == NULL)
@@ -1274,12 +1318,13 @@ void test_fill_k_finger() {
   kfingerprint_file = fopen("test_file", "w");
   if (kfingerprint_file == NULL) {
     printf("test couldn't be completed cause kfingerprint file cannot be opened in writing mode\n");
-    return;
+    exit(1);
   }
 
   header_read = (char *) malloc(100 * sizeof(char));
   if (header_read == NULL) {
     printf("test couldn't be completed cause malloc returned NULL on header_read\n");
+    exit(1);
   }
   strcpy(header_read, "header1");
 
@@ -1298,7 +1343,7 @@ void test_fill_k_finger() {
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   if(fgets(s, 300, test_file) == NULL)
@@ -1333,12 +1378,13 @@ void test_fill_k_finger() {
   kfingerprint_file = fopen("test_file", "w");
   if (kfingerprint_file == NULL) {
     printf("test couldn't be completed cause kfingerprint file cannot be opened in writing mode\n");
-    return;
+    exit(1);
   }
 
   header_read = (char *) malloc(100 * sizeof(char));
   if (header_read == NULL) {
     printf("test couldn't be completed cause malloc returned NULL on header_read\n");
+    exit(1);
   }
   strcpy(header_read, "header1");
 
@@ -1358,7 +1404,7 @@ void test_fill_k_finger() {
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   if(fgets(s, 300, test_file) == NULL)
@@ -1429,12 +1475,13 @@ void test_fill_k_finger() {
   kfingerprint_file = fopen("test_file", "w");
   if (kfingerprint_file == NULL) {
     printf("test couldn't be completed cause kfingerprint file cannot be opened in writing mode\n");
-    return;
+    exit(1);
   }
 
   header_read = (char *) malloc(100 * sizeof(char));
   if (header_read == NULL) {
     printf("test couldn't be completed cause malloc returned NULL on header_read\n");
+    exit(1);
   }
   strcpy(header_read, "header1");
 
@@ -1453,7 +1500,7 @@ void test_fill_k_finger() {
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   if(fgets(s, 300, test_file) == NULL)
@@ -1488,12 +1535,13 @@ void test_fill_k_finger() {
   kfingerprint_file = fopen("test_file", "w");
   if (kfingerprint_file == NULL) {
     printf("test couldn't be completed cause kfingerprint file cannot be opened in writing mode\n");
-    return;
+    exit(1);
   }
 
   header_read = (char *) malloc(100 * sizeof(char));
   if (header_read == NULL) {
     printf("test couldn't be completed cause malloc returned NULL on header_read\n");
+    exit(1);
   }
   strcpy(header_read, "header1");
 
@@ -1514,7 +1562,7 @@ void test_fill_k_finger() {
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   if(fgets(s, 300, test_file) == NULL)
@@ -1548,12 +1596,13 @@ void test_fill_k_finger() {
   kfingerprint_file = fopen("test_file", "w");
   if (kfingerprint_file == NULL) {
     printf("test couldn't be completed cause kfingerprint file cannot be opened in writing mode\n");
-    return;
+    exit(1);
   }
 
   header_read = (char *) malloc(100 * sizeof(char));
   if (header_read == NULL) {
     printf("test couldn't be completed cause malloc returned NULL on header_read\n");
+    exit(1);
   }
   strcpy(header_read, "header1");
 
@@ -1576,7 +1625,7 @@ void test_fill_k_finger() {
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   if(fgets(s, 300, test_file) == NULL)
@@ -1676,12 +1725,13 @@ void test_create_fingerprint() {
   kfingerprint_file = fopen("test_file", "w");
   if (kfingerprint_file == NULL) {
     printf("test couldn't be completed cause kfingerprint file cannot be opened in writing mode\n");
-    return;
+    exit(1);
   }
 
   header_read = (char *) malloc(100 * sizeof(char));
   if (header_read == NULL) {
     printf("test couldn't be completed cause malloc returned NULL on header_read\n");
+    exit(1);
   }
   strcpy(header_read, "header1");
 
@@ -1693,7 +1743,6 @@ void test_create_fingerprint() {
   fill_k_fingerprint(-2);
 */
   finger_result = create_fingerprint("[ \"A\" \"BB\" ]");
-  printf("%s\n", finger_result);
   assert(strcmp("1,2", finger_result) == 0);
   fclose(kfingerprint_file);
 
@@ -1701,7 +1750,7 @@ void test_create_fingerprint() {
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   if(fgets(s, 300, test_file) == NULL)
@@ -1736,12 +1785,13 @@ void test_create_fingerprint() {
   kfingerprint_file = fopen("test_file", "w");
   if (kfingerprint_file == NULL) {
     printf("test couldn't be completed cause kfingerprint file cannot be opened in writing mode\n");
-    return;
+    exit(1);
   }
 
   header_read = (char *) malloc(100 * sizeof(char));
   if (header_read == NULL) {
     printf("test couldn't be completed cause malloc returned NULL on header_read\n");
+    exit(1);
   }
   strcpy(header_read, "header1");
 
@@ -1756,7 +1806,6 @@ void test_create_fingerprint() {
   fill_k_fingerprint(-2);
 */
   finger_result = create_fingerprint("[ \"A\" \"BB\" \"CCC\" \"DDDD\" ]");
-  printf("%s\n", finger_result);
   assert(strcmp("1,2,3,4", finger_result) == 0);
 
   fclose(kfingerprint_file);
@@ -1765,7 +1814,7 @@ void test_create_fingerprint() {
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   if(fgets(s, 300, test_file) == NULL)
@@ -1800,12 +1849,13 @@ void test_create_fingerprint() {
   kfingerprint_file = fopen("test_file", "w");
   if (kfingerprint_file == NULL) {
     printf("test couldn't be completed cause kfingerprint file cannot be opened in writing mode\n");
-    return;
+    exit(1);
   }
 
   header_read = (char *) malloc(100 * sizeof(char));
   if (header_read == NULL) {
     printf("test couldn't be completed cause malloc returned NULL on header_read\n");
+    exit(1);
   }
   strcpy(header_read, "header1");
 
@@ -1820,7 +1870,6 @@ void test_create_fingerprint() {
   fill_k_fingerprint(6);
 */
   finger_result = create_fingerprint("[ \"A\" \"BB\" \"CCC\" \"DDDD\" \"EEEEE\" \"FFFFFF\" ]");
-  printf("%s\n", finger_result);
   assert(strcmp("1,2,3,4,5,6", finger_result) == 0);
   fclose(kfingerprint_file);
 
@@ -1828,7 +1877,7 @@ void test_create_fingerprint() {
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   if(fgets(s, 300, test_file) == NULL)
@@ -1899,12 +1948,13 @@ void test_create_fingerprint() {
   kfingerprint_file = fopen("test_file", "w");
   if (kfingerprint_file == NULL) {
     printf("test couldn't be completed cause kfingerprint file cannot be opened in writing mode\n");
-    return;
+    exit(1);
   }
 
   header_read = (char *) malloc(100 * sizeof(char));
   if (header_read == NULL) {
     printf("test couldn't be completed cause malloc returned NULL on header_read\n");
+    exit(1);
   }
   strcpy(header_read, "header1");
 
@@ -1919,7 +1969,6 @@ void test_create_fingerprint() {
 */
 
   finger_result = create_fingerprint("[ \"<<\" \"AA\" \"BBB\" \">>\" ]");
-  printf("%s\n", finger_result);
   assert(strcmp("-1,2,3,0", finger_result) == 0);
 
   fclose(kfingerprint_file);
@@ -1928,7 +1977,7 @@ void test_create_fingerprint() {
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   if(fgets(s, 300, test_file) == NULL)
@@ -1963,7 +2012,7 @@ void test_create_fingerprint() {
   kfingerprint_file = fopen("test_file", "w");
   if (kfingerprint_file == NULL) {
     printf("test couldn't be completed cause kfingerprint file cannot be opened in writing mode\n");
-    return;
+    exit(1);
   }
 
   header_read = (char *) malloc(100 * sizeof(char));
@@ -1985,7 +2034,6 @@ void test_create_fingerprint() {
 */
 
   finger_result = create_fingerprint("[ \"<<\" \"AA\" \"BBB\" \"CCCC\" \"DDDDD\" \">>\" ]");
-  printf("%s\n", finger_result);
   assert(strcmp("-1,2,3,4,5,0", finger_result) == 0);
 
   fclose(kfingerprint_file);
@@ -1994,7 +2042,7 @@ void test_create_fingerprint() {
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   if(fgets(s, 300, test_file) == NULL)
@@ -2028,7 +2076,7 @@ void test_create_fingerprint() {
   kfingerprint_file = fopen("test_file", "w");
   if (kfingerprint_file == NULL) {
     printf("test couldn't be completed cause kfingerprint file cannot be opened in writing mode\n");
-    return;
+    exit(1);
   }
 
   header_read = (char *) malloc(100 * sizeof(char));
@@ -2056,7 +2104,7 @@ void test_create_fingerprint() {
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   if(fgets(s, 300, test_file) == NULL)
@@ -2144,7 +2192,7 @@ void test_process_fasta() {
   DIR *file;
   struct dirent *inner_file;
   char header_test[300], genom[600];
-  char s[300], c1, c2, header[100], *finger_result;
+  char s[300], c1, c2;
   int f1, f2, f3, f4, z1, z2, z3,z4, cont;
 
 
@@ -2154,14 +2202,14 @@ void test_process_fasta() {
   if (getcwd(path_test, 255) == NULL) {
     printf("process_fasta test cannot be run cause it hasn't been possible to find the current path\n");
     printf("error: %s\n", strerror(errno));
-    return;
+    exit(1);
   }
 
   test_file = fopen("test_file.fasta", "w");
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   fprintf(test_file, "%s\n%s\n", ">header1", "CGTTGCGGAAAGGTC");
@@ -2173,20 +2221,20 @@ void test_process_fasta() {
   file = opendir(path_test);
   if (path_test == NULL) {
     printf("process_fasta test could not be completed cause directory cannot be opened\n");
-    return;
+    exit(1);
   }
 
   inner_file = readdir(file);
   if (inner_file == NULL) {
     printf("process fasta could not be completed cause directory cannot be read\n");
-    return;
+    exit(1);
   }
 
   while (strcmp(inner_file->d_name, "test_file.fasta") != 0){
     inner_file = readdir(file);
     if (inner_file == NULL) {
       printf("process fasta could not be completed cause directory cannot be read\n");
-      return;
+      exit(1);
     }
   }
   closedir(file);
@@ -2202,6 +2250,8 @@ void test_process_fasta() {
   current_genom_size = 0;
   communicate_max_fact_length(0);
   fact_choice = 1;
+  current_header_size = 0;
+  current_genom_size = 0;
 
   printf("processing fasta\n");
   process_fasta(inner_file, path_test);
@@ -2225,7 +2275,7 @@ void test_process_fasta() {
     remove("test_file-kfingerprint");
     remove("test_file-oneformat");
     remove("test_file.fasta");
-    exit;
+    exit(1);
   }
 
   fgets(header_test, 300, test_file);
@@ -2261,7 +2311,7 @@ void test_process_fasta() {
     remove("test_file-kfingerprint");
     remove("test_file-oneformat");
     remove("test_file.fasta");
-    exit;
+    exit(1);
   }
 
   fscanf(test_file, "%s %s\n", header_test, genom);
@@ -2286,7 +2336,7 @@ void test_process_fasta() {
     remove("test_file-kfingerprint");
     remove("test_file-oneformat");
     remove("test_file.fasta");
-    exit;
+    exit(1);
   }
 
  if(fgets(s, 300, test_file) == NULL)
@@ -2482,20 +2532,20 @@ void test_process_fasta() {
   remove("test_file.fasta");
 
   printf("test_case_passed\n");
-/*
+
   printf("test conditions: processing fasta file with no reads\n");
 
   if (getcwd(path_test, 255) == NULL) {
     printf("process_fasta test cannot be run cause it hasn't been possible to find the current path\n");
     printf("error: %s\n", strerror(errno));
-    return;
+    exit(1);
   }
 
   test_file = fopen("test_file.fasta", "w");
   if (test_file == NULL) {
     printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
     remove("test_file");
-    return;
+    exit(1);
   }
 
   fclose(test_file);
@@ -2503,20 +2553,20 @@ void test_process_fasta() {
   file = opendir(path_test);
   if (path_test == NULL) {
     printf("process_fasta test could not be completed cause directory cannot be opened\n");
-    return;
+    exit(1);
   }
 
   inner_file = readdir(file);
   if (inner_file == NULL) {
     printf("process fasta could not be completed cause directory cannot be read\n");
-    return;
+    exit(1);
   }
 
   while (strcmp(inner_file->d_name, "test_file.fasta") != 0){
     inner_file = readdir(file);
     if (inner_file == NULL) {
       printf("process fasta could not be completed cause directory cannot be read\n");
-      return;
+      exit(1);
     }
   }
   closedir(file);
@@ -2555,8 +2605,11 @@ void test_process_fasta() {
     remove("test_file-kfingerprint");
     remove("test_file-oneformat");
     remove("test_file.fasta");
-    exit;
+    exit(1);
   }
+
+  if(fgets(s, 300, test_file) != NULL)
+    assert(0);
 
   fclose(test_file);
 
@@ -2569,8 +2622,11 @@ void test_process_fasta() {
     remove("test_file-kfingerprint");
     remove("test_file-oneformat");
     remove("test_file.fasta");
-    exit;
+    exit(1);
   }
+
+  if(fgets(s, 300, test_file) != NULL)
+    assert(0);
 
   fclose(test_file);
 
@@ -2583,8 +2639,11 @@ void test_process_fasta() {
     remove("test_file-oneformat");
     remove("test_file.fasta");
 
-    exit;
+    exit(1);
   }
+
+  if(fgets(s, 300, test_file) != NULL)
+    assert(0);
 
   fclose(test_file);
 
@@ -2601,6 +2660,9 @@ void test_process_fasta() {
 
   }
 
+  if(fgets(s, 300, test_file) != NULL)
+    assert(0);
+
   fclose(test_file);
 
   remove("test_file-factorization");
@@ -2611,6 +2673,373 @@ void test_process_fasta() {
   remove("test_file.fasta");
 
   printf("test_case_passed\n");
-*/
+
+  printf("test conditions: processing fasta for the second time\n");
+
+  if (getcwd(path_test, 255) == NULL) {
+    printf("process_fasta test cannot be run cause it hasn't been possible to find the current path\n");
+    printf("error: %s\n", strerror(errno));
+    exit(1);
+  }
+
+  test_file = fopen("test_file.fasta", "w");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
+    remove("test_file");
+    exit(1);
+  }
+
+  fprintf(test_file, "%s\n%s\n", ">header1", "CGTTGCGGAAAGGTC");
+  fprintf(test_file, "%s\n%s\n", ">header2", "GTCCCCCAAAAGGGCTC");
+  fprintf(test_file, "%s\n%s\n", ">header3", "GTCTCCCACCTCAG");
+
+  fclose(test_file);
+
+  file = opendir(path_test);
+  if (path_test == NULL) {
+    printf("process_fasta test could not be completed cause directory cannot be opened\n");
+    exit(1);
+  }
+
+  inner_file = readdir(file);
+  if (inner_file == NULL) {
+    printf("process fasta could not be completed cause directory cannot be read\n");
+    exit(1);
+  }
+
+  while (strcmp(inner_file->d_name, "test_file.fasta") != 0){
+    inner_file = readdir(file);
+    if (inner_file == NULL) {
+      printf("process fasta could not be completed cause directory cannot be read\n");
+      exit(1);
+    }
+  }
+  closedir(file);
+
+  strcat(path_test, "/");
+  strcat(path_test, "test_file.fasta");
+
+  window_dimension = 4;
+
+  initialize_k_finger();
+  initialize_tail();
+  current_header_size = 0;
+  current_genom_size = 0;
+  communicate_max_fact_length(0);
+  fact_choice = 1;
+
+  printf("processing fasta\n");
+  process_fasta(inner_file, path_test);
+
+  printf("test conditions: processing fasta with 3 reads\n");
+
+  if (getcwd(path_test, 255) == NULL) {
+    printf("process_fasta test cannot be run cause it hasn't been possible to find the current path\n");
+    printf("error: %s\n", strerror(errno));
+    exit(1);
+  }
+
+  test_file = fopen("test_file.fasta", "w");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
+    remove("test_file");
+    exit(1);
+  }
+
+  fprintf(test_file, "%s\n%s\n", ">header1", "CGTTGCGGAAAGGTC");
+  fprintf(test_file, "%s\n%s\n", ">header2", "GTCCCCCAAAAGGGCTC");
+  fprintf(test_file, "%s\n%s\n", ">header3", "GTCTCCCACCTCAG");
+
+  fclose(test_file);
+
+  file = opendir(path_test);
+  if (path_test == NULL) {
+    printf("process_fasta test could not be completed cause directory cannot be opened\n");
+    exit(1);
+  }
+
+  inner_file = readdir(file);
+  if (inner_file == NULL) {
+    printf("process fasta could not be completed cause directory cannot be read\n");
+    exit(1);
+  }
+
+  while (strcmp(inner_file->d_name, "test_file.fasta") != 0){
+    inner_file = readdir(file);
+    if (inner_file == NULL) {
+      printf("process fasta could not be completed cause directory cannot be read\n");
+      exit(1);
+    }
+  }
+  closedir(file);
+
+  strcat(path_test, "/");
+  strcat(path_test, "test_file.fasta");
+
+  window_dimension = 4;
+
+  initialize_k_finger();
+  initialize_tail();
+  current_header_size = 0;
+  current_genom_size = 0;
+  communicate_max_fact_length(0);
+  fact_choice = 1;
+
+  printf("processing fasta\n");
+  process_fasta(inner_file, path_test);
+
+  if (getcwd(path_test, 255) == NULL) {
+    printf("process_fasta test cannot be run cause it hasn't been possible to find the current path\n");
+    printf("error: %s\n", strerror(errno));
+    exit(1);
+  }
+
+  test_file = fopen("test_file2.fasta", "w");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
+    remove("test_file");
+    exit(1);
+  }
+
+  fprintf(test_file, "%s\n%s\n", ">header1", "CGTTGCGGCA");
+  fprintf(test_file, "%s\n%s\n", ">header2", "GTCCCC");
+  fprintf(test_file, "%s\n%s\n", ">header3", "AAGTCA");
+
+  fclose(test_file);
+
+  file = opendir(path_test);
+  if (path_test == NULL) {
+    printf("process_fasta test could not be completed cause directory cannot be opened\n");
+    exit(1);
+  }
+
+  inner_file = readdir(file);
+  if (inner_file == NULL) {
+    printf("process fasta could not be completed cause directory cannot be read\n");
+    exit(1);
+  }
+
+  while (strcmp(inner_file->d_name, "test_file2.fasta") != 0){
+    inner_file = readdir(file);
+    if (inner_file == NULL) {
+      printf("process fasta could not be completed cause directory cannot be read\n");
+      exit(1);
+    }
+  }
+  closedir(file);
+
+  strcat(path_test, "/");
+  strcat(path_test, "test_file2.fasta");
+
+  printf("processing fasta\n");
+  process_fasta(inner_file, path_test);
+
+    printf("end of processing\n");
+  if (factorization_file == NULL)
+    assert(0);
+  if (fingerprint_file == NULL)
+    assert(0);
+  if (kfingerprint_file == NULL)
+    assert(0);
+  if (oneformat_file == NULL)
+    assert(0);
+
+  test_file = fopen("test_file2-factorization", "r");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file2-factorization cannot be opened in reading mode\n");
+    printf("error: %s\n", strerror(errno));
+    remove("test_file2-factorization");
+    remove("test_file2-fingerprint");
+    remove("test_file2-kfingerprint");
+    remove("test_file2-oneformat");
+    remove("test_file2.fasta");
+    exit(1);
+  }
+
+  fgets(header_test, 300, test_file);
+  fgets(genom, 300, test_file);
+  header_test[strlen(header_test) - 1] = '\0';
+  genom[strlen(genom) - 1] = '\0';
+  assert(strcmp(header_test, ">header1") == 0);
+  assert(strcmp(genom, "[ \"CGTTG\" \"CGG\" \"C\" \"A\" ]") == 0);
+  fgets(header_test, 300, test_file);
+  fgets(genom, 300, test_file);
+  header_test[strlen(header_test) - 1] = '\0';
+  genom[strlen(genom) - 1] = '\0';
+  assert(strcmp(header_test, ">header2") == 0);
+  assert(strcmp(genom, "[ \"GT\" \"C\" \"C\" \"C\" \"C\" ]") == 0);
+  fgets(header_test, 300, test_file);
+  fgets(genom, 300, test_file);
+  header_test[strlen(header_test) - 1] = '\0';
+  genom[strlen(genom) - 1] = '\0';
+  assert(strcmp(header_test, ">header3") == 0);
+  assert(strcmp(genom, "[ \"AAGTC\" \"A\" ]") == 0);
+
+  if(fgets(s, 300, test_file) != NULL)
+    assert(0);
+
+  fclose(test_file);
+
+  test_file = fopen("test_file2-fingerprint", "r");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file2-fingerprint cannot be opened in reading mode\n");
+    printf("error: %s\n", strerror(errno));
+    remove("test_file2-factorization");
+    remove("test_file2-fingerprint");
+    remove("test_file2-kfingerprint");
+    remove("test_file2-oneformat");
+    remove("test_file2.fasta");
+    exit(1);
+  }
+
+  fscanf(test_file, "%s %s\n", header_test, genom);
+  assert(strcmp(header_test, ">header1") == 0);
+  assert(strcmp(genom, "5,3,1,1") == 0);
+  fscanf(test_file, "%s\n%s\n", header_test, genom);
+  assert(strcmp(header_test, ">header2") == 0);
+  assert(strcmp(genom, "2,1,1,1,1") == 0);
+  fscanf(test_file, "%s\n%s\n", header_test, genom);
+  assert(strcmp(header_test, ">header3") == 0);
+  assert(strcmp(genom, "5,1") == 0);
+
+  if(fgets(s, 300, test_file) != NULL)
+    assert(0);
+  fclose(test_file);
+
+  test_file = fopen("test_file2-kfingerprint", "r");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file2-kfingerprint cannot be opened in reading mode\n");
+    remove("test_file2-factorization");
+    remove("test_file2-fingerprint");
+    remove("test_file2-kfingerprint");
+    remove("test_file2-oneformat");
+    remove("test_file2.fasta");
+    exit(1);
+  }
+
+ if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header_test, &cont);
+
+  assert(f1 == 5);
+  assert(f2 == 3);
+  assert(f3 == 1);
+  assert(f4 == 1);
+  assert(c1 == '$');
+  assert(z1 == 0);
+  assert(z2 == 0);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header_test, ">header1") == 0);
+  assert(cont == 0);
+
+ if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header_test, &cont);
+
+  assert(f1 == 2);
+  assert(f2 == 1);
+  assert(f3 == 1);
+  assert(f4 == 1);
+  assert(c1 == '$');
+  assert(z1 == 0);
+  assert(z2 == 0);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header_test, ">header2") == 0);
+  assert(cont == 0);
+
+ if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header_test, &cont);
+
+  assert(f1 == 1);
+  assert(f2 == 1);
+  assert(f3 == 1);
+  assert(f4 == 1);
+  assert(c1 == '$');
+  assert(z1 == 0);
+  assert(z2 == 0);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header_test, ">header2") == 0);
+  assert(cont == 2);
+
+ if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header_test, &cont);
+
+  assert(f1 == 5);
+  assert(f2 == 1);
+  assert(f3 == 0);
+  assert(f4 == 0);
+  assert(c1 == '$');
+  assert(z1 == 0);
+  assert(z2 == 0);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header_test, ">header3") == 0);
+  assert(cont == 0);
+
+ if(fgets(s, 300, test_file) != NULL)
+    assert(0);
+
+  fclose(test_file);
+
+  test_file = fopen("test_file2-oneformat", "r");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file2-oneformat cannot be opened in reading mode\n");
+    printf("error: %s\n", strerror(errno));
+    remove("test_file2-factorization");
+    remove("test_file2-fingerprint");
+    remove("test_file2-kfingerprint");
+    remove("test_file2-oneformat");
+    remove("test_file2.fasta");
+    exit(1);
+  }
+
+  if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+  assert(strcmp(s, ">header1 $ 5,3,1,1 $ [ \"CGTTG\" \"CGG\" \"C\" \"A\" ]") == 0);
+
+  if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+  assert(strcmp(s, ">header2 $ 2,1,1,1,1 $ [ \"GT\" \"C\" \"C\" \"C\" \"C\" ]") == 0);
+
+  if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+  assert(strcmp(s, ">header3 $ 5,1 $ [ \"AAGTC\" \"A\" ]") == 0);
+
+  fclose(test_file);
+
+  remove("test_file-factorization");
+  remove("test_file-fingerprint");
+  remove("test_file-kfingerprint");
+  remove("test_file-oneformat");
+  remove("test_file.fasta");
+
+  remove("test_file2-factorization");
+  remove("test_file2-fingerprint");
+  remove("test_file2-kfingerprint");
+  remove("test_file2-oneformat");
+  remove("test_file2.fasta");
+
+  printf("test_case_passed\n");
+
   printf("process_fasta test passed\n");
 }

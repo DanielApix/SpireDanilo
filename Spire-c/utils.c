@@ -97,6 +97,18 @@ char *substring(char word[], int x, int y) {
 	return sub;
 }
 
+int number_of_elements = 0;
+
+void set_number_of_elements(int num) {
+  number_of_elements = num;
+}
+
+int read_dimension = 0;
+
+void set_read_dimension(int value) {
+ read_dimension = value;
+}
+
 
 int number_of_reads = 0, number_of_factors = 0, factors_length_sum = 0, max_factor_length = 0;
 int number_of_longer_factors = 0, max_fact_len = 0;
@@ -124,13 +136,14 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
 	    current->next = prev;
     }
 
-    int allocated = 400;
+    int allocated = number_of_elements * 4 + read_dimension - 1;
     char *to_string = malloc(allocated);
     strcpy(to_string, "[ ");
 
     int length = 5; //memory for [  ]\0
     node_t *list_t = current;
     while (current != NULL) {
+        /*it should never be executed: it is useful in case of bug in setting the space*/
         if ((length + strlen(current->factor) + 3) > allocated) { //3memory for " "
             allocated += (strlen(current->factor) + 3); //cosi sempre precisa oppure numero fisso
             void *temp = realloc(to_string, allocated);
