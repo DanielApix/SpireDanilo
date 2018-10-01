@@ -19,7 +19,7 @@
 #include <pthread.h>
 #include <sys/wait.h>
 
-#define NUM_PROCESSES 4
+#define PROCESSORS_NUMBER 4
 
 typedef struct {
   int *finger_tail;
@@ -33,25 +33,36 @@ typedef struct {
   int recived_exactly_k_fingers;
 } tail;
 
+typedef struct {
+  char directory_path[100];
+  char filename[255];
+  int deleted;
+} filesystem_node;
 
 struct stat st = {0};
 
+pthread_t thread_ids[PROCESSORS_NUMBER];
+filesystem_node files_to_process[PROCESSORS_NUMBER];
+int available_threads[PROCESSORS_NUMBER];
+int end_of_processing = 0;  //used to comunicate all the threads to finish
 int fact_choice;
 
 char *root_path;     //...of the directory to process
 int max_fact_length = 0; //arbitrary chosen and requested to the user
 
 
-char *header_read;  //refers to the current read
+/*char *header_read;  //refers to the current read
 char *genom_read;
 int current_header_size = 0;
 int current_genom_size = 0;
-
+*/
 int window_dimension;
 
 time_t time_spent_to_read_file = 0;
 time_t time_spent_to_write_in_file = 0;
 
+int test_finish = PROCESSORS_NUMBER;
+int test_activate_process_file_log = 0;
 
 /*necessary to set the dimension of the string returned by list_to_string (efficiency reasons)*/
 int get_number_of_factors();
@@ -82,6 +93,7 @@ void test_initialize_tail();
 char *apply_factorization(char *genom);
 
 FILE *open_towrite_file(char *name, char *fasta_name, char *directory_path);
+void *process_file(void* arg);
 void process_fasta(struct dirent *file_description, char *directory_path);
 void process_all_fasta_files(struct dirent *subdirectory_description, char* current_path);
 
@@ -93,6 +105,7 @@ void do_unit_testing();
 
 void  test_fill_k_finger();
 void test_create_fingerprint();
+void test_process_file();
 void test_process_fasta();
 void do_integration_testing();
 
@@ -127,8 +140,8 @@ stampa le statistiche
 
 int main() {
 
-  do_unit_testing();
-  do_integration_testing();
+//  do_unit_testing();
+//  do_integration_testing();
   /*Catching input from the user*/
 
   printf("Benvenuto nel programma sequenziale Spire\n\n");
@@ -168,9 +181,29 @@ int main() {
   time_t m;
   time_t now = time(NULL);
 
-  for_each_element_in(root_path, process_all_fasta_files);
+  /*thread initialization*/
+  int i, *j;
+  pthread_attr_t *attr;
 
-  print_statistics();
+  end_of_processing = 0;
+  for(i = 0; i < PROCESSORS_NUMBER; i++) {
+    available_threads[i] = 1;
+    files_to_process[i].deleted = 1;
+    j = malloc(sizeof(int));
+    *j = i;
+    attr = malloc(sizeof(pthread_attr_t));
+    pthread_attr_init(attr);
+    pthread_create(&thread_ids[i], attr, process_file, j);
+  }
+  /**/
+
+  for_each_element_in(root_path, process_all_fasta_files);
+  end_of_processing = 1;
+  printf("finished\n");
+  for (i = 0; i < PROCESSORS_NUMBER; i++) 
+    pthread_join(thread_ids[i], NULL);
+  printf("after cycle\n");
+ // print_statistics();
 
   m = difftime(time(NULL), now);
   printf("tempo totale in secondi: %ld\n",m);
@@ -292,6 +325,7 @@ char* append_filename_to_path(char* path, char *name) {
 /*
   pre-condition subdirectory_description: != NULL
   pre-condition current_path: must refer to the file descripted by subdirectory_description
+  PROCESSORS_NUMBER > 0
   post-condition: all fasta files in the specified directory will be processed
 */
 void process_all_fasta_files(struct dirent *subdirectory_description, char* current_path) {
@@ -307,17 +341,49 @@ void process_all_fasta_files(struct dirent *subdirectory_description, char* curr
   pre-condition file_description: must descript an existing file with reads that respect the correct format
   pre-condition path: must refer to the descripted file
   pre-condition: fact_choice >= 1 || fact_choice <= 4
+  pre-condition: PROCESSORS_NUMBER >= 0;
+  pre-condition: PROCESSORS_NUMBER threads must be created before calling this function initialializing available_threads, thread_ids and files_to_process (.deleted set to 1)
 
   post-condition: given the name nam of the fasta file without ".fasta" at the end, nam-factorization, nam-fingerprint,
       nam-kfingerprint, nam-oneformat will be created in the same directory of the fasta file with the respective output inside
 */
 void process_fasta(struct dirent *file_description, char *path) {
 
-  char directory_path[100];
+  int i;
+  char fasta_path[strlen(path)];
+
+  if (strlen(file_description->d_name) > strlen(".fasta")) {
+    if (strstr(file_description->d_name, ".fasta") != NULL) {   //if it has .fasta extention
+      i = 0;
+      while (1) {
+        if(available_threads[i]) {
+          available_threads[i] = 0;
+          break;
+        }
+        i = (i + 1) % PROCESSORS_NUMBER;
+      }
+      files_to_process[i].directory_path[strlen(path) - strlen(file_description->d_name) - 1] = '\0';
+      strncpy(files_to_process[i].directory_path, path, strlen(path) - strlen(file_description->d_name) - 1);
+      strcpy(files_to_process[i].filename, file_description->d_name);  //useful cause sometimes file_description->d_name strangely changes in opening files
+      strcpy(fasta_path, path);
+      files_to_process[i].deleted = 0;
+    }
+  }
+  test_finish--;
+}
+
+/*
+  It is the thread function that processes the file given by the array files_to_process at index given by arg, setting
+  available_threads at same index to true. If no file is given, that is if the filesystem_node of files_to_process at the same
+  index has variable deleted to true, it stays in wait mode until variable end_of_processing is set to true.
+  param: integer that is the index of the interested informations in thread_ids, files_to_process, available_threads
+  pre-condition arg: must be an integer between 0 and NUMBER_PROCESSORS
+*/
+void *process_file(void* arg) {
+
   FILE *fasta_file;
   char *result1;
   char *result2;
-  char filename[255];
   char *header;
   char *genom;
   int current_header_size = 0;
@@ -330,45 +396,68 @@ void process_fasta(struct dirent *file_description, char *path) {
   FILE *fingerprint_file;
   FILE *kfingerprint_file;
   FILE *oneformat_file;
+  char *directory_path;
+  char *filename;
+  const int *identity_in_arrays = arg;
 
-  if (strlen(file_description->d_name) > strlen(".fasta")) {
-    if (strstr(file_description->d_name, ".fasta") != NULL) {   //if it has .fasta extention
-      directory_path[strlen(path) - strlen(file_description->d_name) - 1] = '\0';
-      strncpy(directory_path, path, strlen(path) - strlen(file_description->d_name) - 1);
-      strcpy(filename, file_description->d_name);  //useful cause sometimes file_description->d_name strangely changes in opening files
-      factorization_file = open_towrite_file("factorization", filename, directory_path);
-      fingerprint_file = open_towrite_file("fingerprint", filename, directory_path);
-      kfingerprint_file = open_towrite_file("kfingerprint", filename, directory_path);
-      oneformat_file = open_towrite_file("oneformat", filename, directory_path);
-
-      if ((fasta_file = fopen(path, "r")) == NULL) {
-        printf("error: %s\n\n", strerror(errno));
-      }
-      /*Processing of fasta file*/
-      if (fasta_file != NULL) {
-        while ( (header = safe_fgets(header, &current_header_size, fasta_file)) != NULL ) {
-          genom = safe_fgets(genom, &current_genom_size, fasta_file);
-          result1 = apply_factorization(genom);
-          fprintf(factorization_file, "%s\n%s\n", header, result1);
-          result2 = create_fingerprint(result1, kfingerprint_file, header);
-          fprintf(fingerprint_file, "%s %s\n", header, result2);
-          fprintf(oneformat_file, "%s %c %s %c %s\n", header, '$', result2, '$', result1); 
-        /*  header_read_beck = header;
-          current_header_size_beckup = current_header_size; */
-        }
-     /*   header_read = header_read_beckup;
-        current_header_size = current_header_size_beckup;  */
-      }
-      fclose(kfingerprint_file);
-      fclose(factorization_file);
-      fclose(fingerprint_file);
-      fclose(oneformat_file);
-      printf("%s processed\n", path);
-    }
-    else {
-      printf("Non è stato possibile aprire il file fasta %s\nErrore: %s\n", file_description->d_name, strerror(errno));
-    }
+  do {
+  while((files_to_process[*identity_in_arrays].deleted) && !(end_of_processing)) {
+    if (test_activate_process_file_log)
+      printf("waiting\n");
   }
+  available_threads[*identity_in_arrays] = 0;
+  
+  if (files_to_process[*identity_in_arrays].deleted) {
+    if (test_activate_process_file_log)
+      printf("exiting\n");
+    printf("job done\n");
+    pthread_exit(0);  //process what you have to process and then exit
+  }
+  if (test_activate_process_file_log) {
+    printf("running\n");
+  }
+  filesystem_node *file = &files_to_process[*identity_in_arrays];
+  directory_path = file->directory_path;
+  filename = file->filename;
+  char path[strlen(directory_path) + 1 + strlen(filename)];
+  strcpy(path, directory_path);
+  strcat(path, "/");
+  strcat(path, filename);
+
+  factorization_file = open_towrite_file("factorization", filename, directory_path);
+  fingerprint_file = open_towrite_file("fingerprint", filename, directory_path);
+  kfingerprint_file = open_towrite_file("kfingerprint", filename, directory_path);
+  oneformat_file = open_towrite_file("oneformat", filename, directory_path);
+  if ((fasta_file = fopen(path, "r")) == NULL) {
+    printf("error: %s\n\n", strerror(errno));
+  }
+  /*Processing of fasta file*/
+  if (fasta_file != NULL) {
+    while ( (header = safe_fgets(header, &current_header_size, fasta_file)) != NULL ) {
+      genom = safe_fgets(genom, &current_genom_size, fasta_file);
+      result1 = apply_factorization(genom);
+      fprintf(factorization_file, "%s\n%s\n", header, result1);
+      result2 = create_fingerprint(result1, kfingerprint_file, header);
+      fprintf(fingerprint_file, "%s %s\n", header, result2);
+      fprintf(oneformat_file, "%s %c %s %c %s\n", header, '$', result2, '$', result1); 
+      /*  header_read_beck = header;
+        current_header_size_beckup = current_header_size; */
+    }
+    /*   header_read = header_read_beckup;
+     current_header_size = current_header_size_beckup;  */
+    fclose(kfingerprint_file);
+    fclose(factorization_file);
+    fclose(fingerprint_file);
+    fclose(oneformat_file);
+    printf("%s processed\n", path);
+    test_finish--;  //used only for test
+  }
+  else {
+    printf("Non è stato possibile aprire il file fasta %s\nErrore: %s\n", path, strerror(errno));
+  }
+  available_threads[*identity_in_arrays] = 1;
+  files_to_process[*identity_in_arrays].deleted = 1;
+  } while(1);
 }
 
 /*
@@ -439,20 +528,18 @@ char *apply_factorization(char *genom) {
       second_parameter_value = 1;
       break;
   }
-
   /*needed to set the size of the string returned by list_to_string*/
-  get_number_of_delimeters();
+ /* get_number_of_delimeters();
   number_of_factors = get_number_of_factors();
   set_number_of_elements(number_of_factors);
-  set_number_of_elements(strlen(genom));
+  set_number_of_elements(strlen(genom));*/
   /**/
 
   result = list_to_string(factorized_genom, second_parameter_value);
 
-  number_of_factors = get_number_of_factors();
+/*  number_of_factors = get_number_of_factors();
   set_number_of_elements(number_of_factors);
-
-  return result;
+*/  return result;
 }
 
 
@@ -688,6 +775,7 @@ void do_integration_testing() {
   test_flush();
   test_fill_k_finger();
   test_create_fingerprint();
+  test_process_file();
   test_process_fasta();
   //test of process_all_fasta_files has not been accomplished cause of time constraints
   printf("\nintegration test successfully completed\n\n");
@@ -2179,18 +2267,18 @@ void test_create_fingerprint() {
 
 }
 
-/*If the file descripted is a fasta file, factorization, fingerprint, kfingerprint and the one format of the first three
-  will be created and saved in the same directory containing the file to be processed
-  pre-condition file_description: must descript an existing file with reads that respect the correct format
-  pre-condition path: must refer to the descripted file
-  pre-condition: fact_choice >= 1 || fact_choice <= 4
+/*
+  It is the thread function that processes the file given by the array files_to_process at index given by arg, setting
+  available_threads at same index to true. If no file is given, that is if the filesystem_node of files_to_process at the same
+  index has variable deleted to true, it stays in wait mode until variable end_of_processing is set to true.
+  param: integer that is the index of the interested informations in thread_ids, files_to_process, available_threads
+  pre-condition: this function must be passed to pthread_create
+  pre-condition arg: must be an integer between 0 and NUMBER_PROCESSORS
+  pre-condition: window_dimension > 0;
 
-  post-condition: given the name nam of the fasta file without ".fasta" at the end, nam-factorization, nam-fingerprint,
-      nam-kfingerprint, nam-oneformat will be created in the same directory of the fasta file with the respective output inside
-
-void process_fasta(struct dirent *file_description, char *path)
+void *process_file(void* arg)
 */
-void test_process_fasta() {
+void test_process_file() {
 
   FILE *test_file;
   char path_test[300];
@@ -2199,12 +2287,14 @@ void test_process_fasta() {
   char header_test[300], genom[600];
   char s[300], c1, c2;
   int f1, f2, f3, f4, z1, z2, z3,z4, cont;
+  pthread_t tid;
+  pthread_attr_t att;
+  int index = 0;
 
+  printf("\n\nStart of process_file test\n");
+  printf("test conditions: processing fasta with 3 reads, creting the filesystem_node after launching the thread\n");
 
-  printf("\n\nStart of process_fasta test\n");
-  printf("test conditions: processing fasta with 3 reads\n");
-
-  if (getcwd(path_test, 255) == NULL) {
+   if (getcwd(path_test, 255) == NULL) {
     printf("process_fasta test cannot be run cause it hasn't been possible to find the current path\n");
     printf("error: %s\n", strerror(errno));
     exit(1);
@@ -2225,46 +2315,373 @@ void test_process_fasta() {
 
   file = opendir(path_test);
   if (path_test == NULL) {
-    printf("process_fasta test could not be completed cause directory cannot be opened\n");
+    printf("process_file test could not be completed cause directory cannot be opened\n");
     exit(1);
   }
 
   inner_file = readdir(file);
   if (inner_file == NULL) {
-    printf("process fasta could not be completed cause directory cannot be read\n");
+    printf("process file test could not be completed cause directory cannot be read\n");
     exit(1);
   }
 
   while (strcmp(inner_file->d_name, "test_file.fasta") != 0){
     inner_file = readdir(file);
     if (inner_file == NULL) {
-      printf("process fasta could not be completed cause directory cannot be read\n");
+      printf("process file test could not be completed cause directory cannot be read\n");
       exit(1);
     }
   }
   closedir(file);
 
-  strcat(path_test, "/");
-  strcat(path_test, "test_file.fasta");
+  end_of_processing = 0;
+  files_to_process[0].deleted = 1;
+  pthread_attr_init(&att);
+  pthread_create(&tid, &att, process_file, &index);
 
   window_dimension = 4;
-
-  current_header_size = 0;
-  current_genom_size = 0;
-
+  strcpy(files_to_process[0].directory_path, path_test);
+  strcpy(files_to_process[0].filename, "test_file.fasta");
+  strcat(path_test, "/");
+  strcat(path_test, "test_file.fasta");
   communicate_max_fact_length(0);
   fact_choice = 1;
-  current_header_size = 0;
-  current_genom_size = 0;
-
-  printf("processing fasta\n");
-  process_fasta(inner_file, path_test);
-
-  printf("end of processing\n");
+  files_to_process[0].deleted = 0;
+  
+  end_of_processing = 1;
+  pthread_join(tid, NULL);
 
   test_file = fopen("test_file-factorization", "r");
   if (test_file == NULL) {
-    printf("test couldn't be completed cause test_file-factorization.txt cannot be opened in reading mode\n");
+    printf("test couldn't be completed cause test_file-factorization cannot be opened in reading mode\n");
+    printf("error: %s\n", strerror(errno));
+    remove("test_file-factorization");
+    remove("test_file-fingerprint");
+    remove("test_file-kfingerprint");
+    remove("test_file-oneformat");
+    remove("test_file.fasta");
+    exit(1);
+  }
+
+  fgets(header_test, 300, test_file);
+  fgets(genom, 300, test_file);
+  header_test[strlen(header_test) - 1] = '\0';
+  genom[strlen(genom) - 1] = '\0';
+  assert(strcmp(header_test, ">header1") == 0);
+  assert(strcmp(genom, "[ \"CGTTG\" \"CGG\" \"AAAGGTC\" ]") == 0);
+  fgets(header_test, 300, test_file);
+  fgets(genom, 300, test_file);
+  header_test[strlen(header_test) - 1] = '\0';
+  genom[strlen(genom) - 1] = '\0';
+  assert(strcmp(header_test, ">header2") == 0);
+  assert(strcmp(genom, "[ \"GT\" \"C\" \"C\" \"C\" \"C\" \"C\" \"AAAAGGGCTC\" ]") == 0);
+  fgets(header_test, 300, test_file);
+  fgets(genom, 300, test_file);
+  header_test[strlen(header_test) - 1] = '\0';
+  genom[strlen(genom) - 1] = '\0';
+  assert(strcmp(header_test, ">header3") == 0);
+  assert(strcmp(genom, "[ \"GT\" \"CT\" \"C\" \"C\" \"C\" \"ACCTCAG\" ]") == 0);
+
+  if(fgets(s, 300, test_file) != NULL)
+    assert(0);
+
+  fclose(test_file);
+
+  test_file = fopen("test_file-fingerprint", "r");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file-fingerprint.txt cannot be opened in reading mode\n");
+    printf("error: %s\n", strerror(errno));
+    remove("test_file-factorization");
+    remove("test_file-fingerprint");
+    remove("test_file-kfingerprint");
+    remove("test_file-oneformat");
+    remove("test_file.fasta");
+    exit(1);
+  }
+
+  fscanf(test_file, "%s %s\n", header_test, genom);
+  assert(strcmp(header_test, ">header1") == 0);
+  assert(strcmp(genom, "5,3,7") == 0);
+  fscanf(test_file, "%s\n%s\n", header_test, genom);
+  assert(strcmp(header_test, ">header2") == 0);
+  assert(strcmp(genom, "2,1,1,1,1,1,10") == 0);
+  fscanf(test_file, "%s\n%s\n", header_test, genom);
+  assert(strcmp(header_test, ">header3") == 0);
+  assert(strcmp(genom, "2,2,1,1,1,7") == 0);
+
+  if(fgets(s, 300, test_file) != NULL)
+    assert(0);
+  fclose(test_file);
+
+  test_file = fopen("test_file-kfingerprint", "r");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file-kfingerprint.txt cannot be opened in reading mode\n");
+    remove("test_file-factorization");
+    remove("test_file-fingerprint");
+    remove("test_file-kfingerprint");
+    remove("test_file-oneformat");
+    remove("test_file.fasta");
+    exit(1);
+  }
+
+ if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header_test, &cont);
+
+  assert(f1 == 5);
+  assert(f2 == 3);
+  assert(f3 == 7);
+  assert(f4 == 0);
+  assert(c1 == '$');
+  assert(z1 == 0);
+  assert(z2 == 0);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header_test, ">header1") == 0);
+  assert(cont == 0);
+
+ if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header_test, &cont);
+
+  assert(f1 == 2);
+  assert(f2 == 1);
+  assert(f3 == 1);
+  assert(f4 == 1);
+  assert(c1 == '$');
+  assert(z1 == 0);
+  assert(z2 == 0);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header_test, ">header2") == 0);
+  assert(cont == 0);
+
+ if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header_test, &cont);
+
+  assert(f1 == 1);
+  assert(f2 == 1);
+  assert(f3 == 1);
+  assert(f4 == 1);
+  assert(c1 == '$');
+  assert(z1 == 0);
+  assert(z2 == 0);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header_test, ">header2") == 0);
+  assert(cont == 2);
+
+ if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header_test, &cont);
+
+  assert(f1 == 1);
+  assert(f2 == 1);
+  assert(f3 == 1);
+  assert(f4 == 1);
+  assert(c1 == '$');
+  assert(z1 == 0);
+  assert(z2 == 0);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header_test, ">header2") == 0);
+  assert(cont == 3);
+
+ if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header_test, &cont);
+
+  assert(f1 == 1);
+  assert(f2 == 1);
+  assert(f3 == 1);
+  assert(f4 == 10);
+  assert(c1 == '$');
+  assert(z1 == 0);
+  assert(z2 == 0);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header_test, ">header2") == 0);
+  assert(cont == 4);
+
+ if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header_test, &cont);
+
+  assert(f1 == 2);
+  assert(f2 == 2);
+  assert(f3 == 1);
+  assert(f4 == 1);
+  assert(c1 == '$');
+  assert(z1 == 0);
+  assert(z2 == 0);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header_test, ">header3") == 0);
+  assert(cont == 0);
+
+  if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header_test, &cont);
+
+  assert(f1 == 2);
+  assert(f2 == 1);
+  assert(f3 == 1);
+  assert(f4 == 1);
+  assert(c1 == '$');
+  assert(z1 == 0);
+  assert(z2 == 0);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header_test, ">header3") == 0);
+  assert(cont == 2);
+
+  if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+
+  sscanf(s, "%d %d %d %d %c %d %d %d %d %c %s %d", &f1, &f2, &f3, &f4, &c1, &z1, &z2, &z3, &z4, &c2, header_test, &cont);
+
+  assert(f1 == 1);
+  assert(f2 == 1);
+  assert(f3 == 1);
+  assert(f4 == 7);
+  assert(c1 == '$');
+  assert(z1 == 0);
+  assert(z2 == 0);
+  assert(z3 == 0);
+  assert(z4 == 0);
+  assert(c2 == '$');
+  assert(strcmp(header_test, ">header3") == 0);
+  assert(cont == 4);
+
+ if(fgets(s, 300, test_file) != NULL)
+    assert(0);
+
+  fclose(test_file);
+
+  test_file = fopen("test_file-oneformat", "r");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file-oneformat.txt cannot be opened in reading mode\n");
+    printf("error: %s\n", strerror(errno));
+    remove("test_file-factorization");
+    remove("test_file-fingerprint");
+    remove("test_file-kfingerprint");
+    remove("test_file-oneformat");
+    remove("test_file.fasta");
+    exit(1);
+  }
+
+  if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+  assert(strcmp(s, ">header1 $ 5,3,7 $ [ \"CGTTG\" \"CGG\" \"AAAGGTC\" ]") == 0);
+
+  if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+  assert(strcmp(s, ">header2 $ 2,1,1,1,1,1,10 $ [ \"GT\" \"C\" \"C\" \"C\" \"C\" \"C\" \"AAAAGGGCTC\" ]") == 0);
+
+  if(fgets(s, 300, test_file) == NULL)
+    assert(0);
+  s[strlen(s) - 1] = '\0';
+  assert(strcmp(s, ">header3 $ 2,2,1,1,1,7 $ [ \"GT\" \"CT\" \"C\" \"C\" \"C\" \"ACCTCAG\" ]") == 0);
+
+  fclose(test_file);
+
+  remove("test_file-factorization");
+  remove("test_file-fingerprint");
+  remove("test_file-kfingerprint");
+  remove("test_file-oneformat");
+  remove("test_file.fasta");
+
+  printf("test_case_passed\n");
+
+  printf("test conditions: processing fasta with 3 reads, creting the filesystem_node before launching the thread\n");
+
+   if (getcwd(path_test, 255) == NULL) {
+    printf("process_fasta test cannot be run cause it hasn't been possible to find the current path\n");
+    printf("error: %s\n", strerror(errno));
+    exit(1);
+  }
+
+  test_file = fopen("test_file.fasta", "w");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
+    remove("test_file");
+    exit(1);
+  }
+
+  fprintf(test_file, "%s\n%s\n", ">header1", "CGTTGCGGAAAGGTC");
+  fprintf(test_file, "%s\n%s\n", ">header2", "GTCCCCCAAAAGGGCTC");
+  fprintf(test_file, "%s\n%s\n", ">header3", "GTCTCCCACCTCAG");
+
+  fclose(test_file);
+
+  file = opendir(path_test);
+  if (path_test == NULL) {
+    printf("process_file test could not be completed cause directory cannot be opened\n");
+    exit(1);
+  }
+
+  inner_file = readdir(file);
+  if (inner_file == NULL) {
+    printf("process file test could not be completed cause directory cannot be read\n");
+    exit(1);
+  }
+
+  while (strcmp(inner_file->d_name, "test_file.fasta") != 0){
+    inner_file = readdir(file);
+    if (inner_file == NULL) {
+      printf("process file test could not be completed cause directory cannot be read\n");
+      exit(1);
+    }
+  }
+  closedir(file);
+
+  end_of_processing = 0;
+  window_dimension = 4;
+  strcpy(files_to_process[0].directory_path, path_test);
+  strcpy(files_to_process[0].filename, "test_file.fasta");
+  strcat(path_test, "/");
+  strcat(path_test, "test_file.fasta");
+  files_to_process[0].deleted = 0;
+
+  printf("%s\n", files_to_process[0].directory_path);
+  printf("%s\n", files_to_process[0].filename);
+
+  communicate_max_fact_length(0);
+  fact_choice = 1;
+
+  pthread_attr_init(&att);
+  pthread_create(&tid, &att, process_file, &index);
+  end_of_processing = 1;
+  pthread_join(tid, NULL);
+
+  test_file = fopen("test_file-factorization", "r");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file-factorization cannot be opened in reading mode\n");
     printf("error: %s\n", strerror(errno));
     remove("test_file-factorization");
     remove("test_file-fingerprint");
@@ -2567,20 +2984,21 @@ void test_process_fasta() {
   }
   closedir(file);
 
+  end_of_processing = 0;
+  window_dimension = 4;
+  strcpy(files_to_process[0].directory_path, path_test);
+  strcpy(files_to_process[0].filename, "test_file.fasta");
   strcat(path_test, "/");
   strcat(path_test, "test_file.fasta");
+  files_to_process[0].deleted = 0;
 
-  window_dimension = 4;
-
-  current_header_size = 0;
-  current_genom_size = 0;
   communicate_max_fact_length(0);
   fact_choice = 1;
 
-  printf("processing fasta\n");
-  process_fasta(inner_file, path_test);
-
-  printf("end of processing\n");
+  pthread_attr_init(&att);
+  pthread_create(&tid, &att, process_file, &index);
+  end_of_processing = 1;
+  pthread_join(tid, NULL);
 
   test_file = fopen("test_file-factorization", "r");
   if (test_file == NULL) {
@@ -2702,20 +3120,22 @@ void test_process_fasta() {
   }
   closedir(file);
 
+  fact_choice = 1;
+  end_of_processing = 0;
+  window_dimension = 4;
+  strcpy(files_to_process[0].directory_path, path_test);
+  strcpy(files_to_process[0].filename, "test_file.fasta");
   strcat(path_test, "/");
   strcat(path_test, "test_file.fasta");
+  files_to_process[0].deleted = 0;
 
-  window_dimension = 4;
-
-  current_header_size = 0;
-  current_genom_size = 0;
   communicate_max_fact_length(0);
   fact_choice = 1;
 
-  printf("processing fasta\n");
-  process_fasta(inner_file, path_test);
-
-  printf("test conditions: processing fasta with 3 reads\n");
+  pthread_attr_init(&att);
+  pthread_create(&tid, &att, process_file, &index);
+  end_of_processing = 1;
+  pthread_join(tid, NULL);
 
   if (getcwd(path_test, 255) == NULL) {
     printf("process_fasta test cannot be run cause it hasn't been possible to find the current path\n");
@@ -2757,18 +3177,22 @@ void test_process_fasta() {
   }
   closedir(file);
 
+  fact_choice = 1;
+  end_of_processing = 0;
+  window_dimension = 4;
+  strcpy(files_to_process[0].directory_path, path_test);
+  strcpy(files_to_process[0].filename, "test_file.fasta");
   strcat(path_test, "/");
   strcat(path_test, "test_file.fasta");
+  files_to_process[0].deleted = 0;
 
-  window_dimension = 4;
-
-  current_header_size = 0;
-  current_genom_size = 0;
   communicate_max_fact_length(0);
   fact_choice = 1;
 
-  printf("processing fasta\n");
-  process_fasta(inner_file, path_test);
+  pthread_attr_init(&att);
+  pthread_create(&tid, &att, process_file, &index);
+  end_of_processing = 1;
+  pthread_join(tid, NULL);
 
   if (getcwd(path_test, 255) == NULL) {
     printf("process_fasta test cannot be run cause it hasn't been possible to find the current path\n");
@@ -2810,13 +3234,21 @@ void test_process_fasta() {
   }
   closedir(file);
 
+  end_of_processing = 0;
+  window_dimension = 4;
+  strcpy(files_to_process[0].directory_path, path_test);
+  strcpy(files_to_process[0].filename, "test_file2.fasta");
   strcat(path_test, "/");
   strcat(path_test, "test_file2.fasta");
+  files_to_process[0].deleted = 0;
 
-  printf("processing fasta\n");
-  process_fasta(inner_file, path_test);
+  communicate_max_fact_length(0);
+  fact_choice = 1;
 
-  printf("end of processing\n");
+  pthread_attr_init(&att);
+  pthread_create(&tid, &att, process_file, &index);
+  end_of_processing = 1;
+  pthread_join(tid, NULL);
 
   test_file = fopen("test_file2-factorization", "r");
   if (test_file == NULL) {
@@ -3015,5 +3447,277 @@ void test_process_fasta() {
 
   printf("test_case_passed\n");
 
+  printf("\n\nStart of process_file test\n");
+  printf("test conditions: test of state transitions\n");
+
+   if (getcwd(path_test, 255) == NULL) {
+    printf("process_fasta test cannot be run cause it hasn't been possible to find the current path\n");
+    printf("error: %s\n", strerror(errno));
+    exit(1);
+  }
+
+  test_file = fopen("test_file.fasta", "w");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file cannot be opened in reading mode\n");
+    remove("test_file");
+    exit(1);
+  }
+
+  fclose(test_file);
+
+  file = opendir(path_test);
+  if (path_test == NULL) {
+    printf("process_file test could not be completed cause directory cannot be opened\n");
+    exit(1);
+  }
+
+  inner_file = readdir(file);
+  if (inner_file == NULL) {
+    printf("process file test could not be completed cause directory cannot be read\n");
+    exit(1);
+  }
+
+  while (strcmp(inner_file->d_name, "test_file.fasta") != 0){
+    inner_file = readdir(file);
+    if (inner_file == NULL) {
+      printf("process file test could not be completed cause directory cannot be read\n");
+      exit(1);
+    }
+  }
+  closedir(file);
+
+  window_dimension = 4;
+  strcpy(files_to_process[0].directory_path, path_test);
+  strcpy(files_to_process[0].filename, "test_file.fasta");
+  strcat(path_test, "/");
+  strcat(path_test, "test_file.fasta");
+  end_of_processing = 0;
+
+  printf("%s\n", files_to_process[0].directory_path);
+  printf("%s\n", files_to_process[0].filename);
+
+  communicate_max_fact_length(0);
+  fact_choice = 1;
+  test_activate_process_file_log = 1;
+
+  pthread_attr_init(&att);
+  printf("thread should be in wait mode now\n");
+  pthread_create(&tid, &att, process_file, &index);
+  sleep(1);  
+
+  printf("thread should be running\n");
+  files_to_process[0].deleted = 0;
+  sleep(1);
+  printf("thread should be running at first an thad exiting\n");
+  files_to_process[0].deleted = 0;
+  end_of_processing = 1;  
+  pthread_join(tid, NULL);
+
+
+  remove("test_file-factorization");
+  remove("test_file-fingerprint");
+  remove("test_file-kfingerprint");
+  remove("test_file-oneformat");
+  remove("test_file.fasta");
+
+  test_activate_process_file_log = 0;
+
+  printf("test_case_passed\n");
+
   printf("process_fasta test passed\n");
+}
+
+
+void test_process_file_create_file(char* filename, char* path_test, FILE *test_file) {
+
+  if (getcwd(path_test, 255) == NULL) {
+    printf("process_fasta test cannot be run cause it hasn't been possible to find the current path\n");
+    printf("error: %s\n", strerror(errno));
+    exit(1);
+  }
+
+  test_file = fopen(filename, "w");
+  if (test_file == NULL) {
+    printf("test couldn't be completed cause test_file cannot be opened in writing mode\n");
+    remove("test_file");
+    exit(1);
+  }
+
+  fclose(test_file);
+}
+
+void test_set_parameters(char* path_test, struct dirent **inner_file, char *filename, DIR *file) {
+  file = opendir(path_test);
+  if (path_test == NULL) {
+    printf("process_fasta test could not be completed cause directory cannot be opened\n");
+    exit(1);
+  }
+
+  *inner_file = readdir(file);
+  if (*inner_file == NULL) {
+    printf("process fasta could not be completed cause directory cannot be read\n");
+    printf("error: %s\n", strerror(errno));
+    exit(1);
+  }
+
+  while (strcmp((*inner_file)->d_name, filename) != 0){
+    *inner_file = readdir(file);
+    if (inner_file == NULL) {
+      printf("process fasta could not be completed cause directory cannot be read\n");
+      printf("error: %s\n", strerror(errno));
+      exit(1);
+    }
+  }
+  closedir(file);
+
+  strcat(path_test, "/");
+  strcat(path_test, filename);
+
+  window_dimension = 4;
+
+  communicate_max_fact_length(0);
+  fact_choice = 1;
+  test_finish = 1;
+  end_of_processing = 0;
+}
+
+void test_process_file_create_threads() {
+
+  int i, *j;
+  pthread_attr_t *attr;
+
+  for(i = 0; i < PROCESSORS_NUMBER; i++) {
+    available_threads[i] = 1;
+    files_to_process[i].deleted = 1;
+    available_threads[i] = 1;
+    j = malloc(sizeof(int));
+    *j = i;
+    attr = malloc(sizeof(pthread_attr_t));
+    pthread_attr_init(attr);
+    pthread_create(&thread_ids[i], attr, process_file, j);
+  }
+}
+
+int verify_file_exists(char* filename, char* kind, FILE *test_file) {
+  char complete_filename[255];
+
+  strcpy(complete_filename, filename);
+  strcat(complete_filename, kind);
+  test_file = fopen(complete_filename, "r");
+  if (test_file == NULL) { 
+    return 0;
+  }
+
+  fclose(test_file);
+  remove(complete_filename);
+  return 1;
+}
+
+int test_process_file_file_exist(char* filename, char* path_test, struct dirent *inner_file, FILE *test_file) {
+
+  int result1 = 0, result2 = 0, result3 = 0, result4 = 0;
+  sleep(2);  //creating files takes time. Waiting for a little while is enough to fix the problem
+  result1 = verify_file_exists(filename, "-factorization", test_file);
+  result2 = verify_file_exists(filename, "-fingerprint", test_file);
+  result3 = verify_file_exists(filename, "-kfingerprint", test_file);
+  result4 = verify_file_exists(filename, "-oneformat", test_file);
+
+  remove(filename);
+
+  return result1 && result2 && result3 && result4;
+}
+
+/*If the file descripted is a fasta file, factorization, fingerprint, kfingerprint and the one format of the first three
+  will be created and saved in the same directory containing the file to be processed
+  pre-condition file_description: must descript an existing file with reads that respect the correct format
+  pre-condition path: must refer to the descripted file
+  pre-condition: fact_choice >= 1 || fact_choice <= 4
+
+  post-condition: given the name nam of the fasta file without ".fasta" at the end, nam-factorization, nam-fingerprint,
+      nam-kfingerprint, nam-oneformat will be created in the same directory of the fasta file with the respective output inside
+
+void process_fasta(struct dirent *file_description, char *path)
+*/
+void test_process_fasta() {
+
+  FILE *test_file;
+  char path_test[300];
+  DIR *file;
+  struct dirent *inner_file;
+  char filename[255];
+  struct dirent *beckup;
+
+  printf("\n\nStart of process_fasta test\n");
+  printf("test conditions: precessing of one fasta file with one available thread\n");
+  
+  strcpy(filename, "test_file.fasta");
+  strcpy(path_test, "");
+  test_file = NULL;
+  inner_file = NULL;
+  file = NULL;
+  
+  test_process_file_create_file(filename, path_test, test_file);
+  test_set_parameters(path_test, &inner_file, filename, file);
+  beckup = malloc(sizeof(struct dirent));
+  strcpy(beckup->d_name, inner_file->d_name);
+  inner_file = beckup;  //cause location pointed by inner_file changes after test_process_file_create_threads() function execution
+  test_process_file_create_threads();
+
+  printf("processing fasta\n");
+  process_fasta(inner_file, path_test);
+  while(test_finish > 0);
+  printf("end of processing\n");
+  end_of_processing = 1;
+  assert(test_process_file_file_exist("test_file", path_test, inner_file, test_file));
+  printf("test_case_passed\n");
+
+
+  printf("test conditions: processing of a file whose name length is less then length of \".fasta\"\n");
+  
+  strcpy(filename, "min");
+  strcpy(path_test, "");
+  test_file = NULL;
+  inner_file = NULL;
+  file = NULL;
+  
+  test_process_file_create_file(filename, path_test, test_file);
+  test_set_parameters(path_test, &inner_file, filename, file);
+  beckup = malloc(sizeof(struct dirent));
+  strcpy(beckup->d_name, inner_file->d_name);
+  inner_file = beckup;  //cause location pointed by inner_file changes after test_process_file_create_threads() function execution
+  test_process_file_create_threads();
+
+  printf("processing fasta\n");
+  process_fasta(inner_file, path_test);
+  while(test_finish > 0);
+  printf("end of processing\n");
+ 
+  assert(!test_process_file_file_exist("min", path_test, inner_file, test_file));
+  printf("test_case_passed\n");
+
+  printf("test conditions: processing of a file whose name length is major then length of \".fasta\" but is not a fasta file\n");
+  
+  strcpy(filename, "longer_name");
+  strcpy(path_test, "");
+  test_file = NULL;
+  inner_file = NULL;
+  file = NULL;
+  
+  test_process_file_create_file(filename, path_test, test_file);
+  test_set_parameters(path_test, &inner_file, filename, file);
+  beckup = malloc(sizeof(struct dirent));
+  strcpy(beckup->d_name, inner_file->d_name);
+  inner_file = beckup;  //cause location pointed by inner_file changes after test_process_file_create_threads() function execution
+  test_process_file_create_threads();
+
+  printf("processing fasta\n");
+  process_fasta(inner_file, path_test);
+  while(test_finish > 0);
+  printf("end of processing\n");
+ 
+  assert(!test_process_file_file_exist("longer_name", path_test, inner_file, test_file));
+  printf("test_case_passed\n");
+
+
+
 }

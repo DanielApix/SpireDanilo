@@ -136,7 +136,7 @@ char *list_to_string(node_t *list, int reverse) { //0 true 1 false
 	    current->next = prev;
     }
 
-    int allocated = number_of_elements * 4 + read_dimension - 1;
+    int allocated = 400;//number_of_elements * 4 + read_dimension - 1;
     char *to_string = malloc(allocated);
     strcpy(to_string, "[ ");
 
