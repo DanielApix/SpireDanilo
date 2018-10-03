@@ -19,7 +19,7 @@
 #include <pthread.h>
 #include <sys/wait.h>
 
-#define PROCESSORS_NUMBER 4
+#define PROCESSORS_NUMBER 3
 
 typedef struct {
   int *finger_tail;
@@ -199,11 +199,21 @@ int main() {
 
   for_each_element_in(root_path, process_all_fasta_files);
   end_of_processing = 1;
-  printf("finished\n");
+/*  for (i = 0; i < PROCESSORS_NUMBER; i++) 
+    pthread_join(thread_ids[i], NULL);
+*/
+  int threads_have_done;
+  while (!threads_have_done) {
+    threads_have_done = 0;
+    for (i = 0; i < PROCESSORS_NUMBER; i++)
+      threads_have_done = threads_have_done | !available_threads[i];  //if at least one thread hasn't finished, continue waiting
+  }
+
+  end_of_processing = 1;
   for (i = 0; i < PROCESSORS_NUMBER; i++) 
     pthread_join(thread_ids[i], NULL);
-  printf("after cycle\n");
- // print_statistics();
+
+  print_statistics();
 
   m = difftime(time(NULL), now);
   printf("tempo totale in secondi: %ld\n",m);
@@ -372,6 +382,8 @@ void process_fasta(struct dirent *file_description, char *path) {
   test_finish--;
 }
 
+int running = 0;
+
 /*
   It is the thread function that processes the file given by the array files_to_process at index given by arg, setting
   available_threads at same index to true. If no file is given, that is if the filesystem_node of files_to_process at the same
@@ -399,65 +411,69 @@ void *process_file(void* arg) {
   char *directory_path;
   char *filename;
   const int *identity_in_arrays = arg;
-
-  do {
-  while((files_to_process[*identity_in_arrays].deleted) && !(end_of_processing)) {
-    if (test_activate_process_file_log)
-      printf("waiting\n");
-  }
-  available_threads[*identity_in_arrays] = 0;
-  
-  if (files_to_process[*identity_in_arrays].deleted) {
-    if (test_activate_process_file_log)
-      printf("exiting\n");
-    printf("job done\n");
-    pthread_exit(0);  //process what you have to process and then exit
-  }
-  if (test_activate_process_file_log) {
-    printf("running\n");
-  }
-  filesystem_node *file = &files_to_process[*identity_in_arrays];
-  directory_path = file->directory_path;
-  filename = file->filename;
-  char path[strlen(directory_path) + 1 + strlen(filename)];
-  strcpy(path, directory_path);
-  strcat(path, "/");
-  strcat(path, filename);
-
-  factorization_file = open_towrite_file("factorization", filename, directory_path);
-  fingerprint_file = open_towrite_file("fingerprint", filename, directory_path);
-  kfingerprint_file = open_towrite_file("kfingerprint", filename, directory_path);
-  oneformat_file = open_towrite_file("oneformat", filename, directory_path);
-  if ((fasta_file = fopen(path, "r")) == NULL) {
-    printf("error: %s\n\n", strerror(errno));
-  }
-  /*Processing of fasta file*/
-  if (fasta_file != NULL) {
-    while ( (header = safe_fgets(header, &current_header_size, fasta_file)) != NULL ) {
-      genom = safe_fgets(genom, &current_genom_size, fasta_file);
-      result1 = apply_factorization(genom);
-      fprintf(factorization_file, "%s\n%s\n", header, result1);
-      result2 = create_fingerprint(result1, kfingerprint_file, header);
-      fprintf(fingerprint_file, "%s %s\n", header, result2);
-      fprintf(oneformat_file, "%s %c %s %c %s\n", header, '$', result2, '$', result1); 
-      /*  header_read_beck = header;
-        current_header_size_beckup = current_header_size; */
+  while(1) {
+  if (!files_to_process[*identity_in_arrays].deleted) {   //if there is a file exclusively to process by you
+    if (test_activate_process_file_log) {
+      printf("running state\n");
     }
-    /*   header_read = header_read_beckup;
-     current_header_size = current_header_size_beckup;  */
-    fclose(kfingerprint_file);
-    fclose(factorization_file);
-    fclose(fingerprint_file);
-    fclose(oneformat_file);
-    printf("%s processed\n", path);
-    test_finish--;  //used only for test
+    running = 1;
+        available_threads[*identity_in_arrays] = 0;
+        filesystem_node *file = &files_to_process[*identity_in_arrays];
+        directory_path = file->directory_path;
+        filename = file->filename;
+        char path[strlen(directory_path) + 1 + strlen(filename)];
+        strcpy(path, directory_path);
+        strcat(path, "/");
+        strcat(path, filename);
+
+        factorization_file = open_towrite_file("factorization", filename, directory_path);
+        fingerprint_file = open_towrite_file("fingerprint", filename, directory_path);
+        kfingerprint_file = open_towrite_file("kfingerprint", filename, directory_path);
+        oneformat_file = open_towrite_file("oneformat", filename, directory_path);
+        if ((fasta_file = fopen(path, "r")) == NULL) {
+         printf("error: %s\n\n", strerror(errno));
+        }
+       /*Processing of fasta file*/
+        if (fasta_file != NULL) {
+          while ( (header = safe_fgets(header, &current_header_size, fasta_file)) != NULL ) {
+            genom = safe_fgets(genom, &current_genom_size, fasta_file);
+            result1 = apply_factorization(genom);
+            fprintf(factorization_file, "%s\n%s\n", header, result1);
+            result2 = create_fingerprint(result1, kfingerprint_file, header);
+            fprintf(fingerprint_file, "%s %s\n", header, result2);
+            fprintf(oneformat_file, "%s %c %s %c %s\n", header, '$', result2, '$', result1); 
+            /*  header_read_beck = header;
+            current_header_size_beckup = current_header_size; */
+          }
+          /*   header_read = header_read_beckup;
+          current_header_size = current_header_size_beckup;  */
+          fclose(kfingerprint_file);
+          fclose(factorization_file);
+          fclose(fingerprint_file);
+          fclose(oneformat_file);
+          printf("%s processed\n", path);
+          test_finish--;  //used only for test
+        }
+        else {
+          printf("Non è stato possibile aprire il file fasta %s\nErrore: %s\n", path, strerror(errno));
+        }
+        available_threads[*identity_in_arrays] = 1;
+        files_to_process[*identity_in_arrays].deleted = 1;
+      }
+    else {   
+      if(end_of_processing) {  //if you have not to wait and there is nothing else to process
+         pthread_exit(0);
+        if (test_activate_process_file_log) {
+          printf("exit state\n");
+        }
+      }
+      else {
+        if (test_activate_process_file_log) {
+          printf("wait state\n");
+        }
+      }
+    }
   }
-  else {
-    printf("Non è stato possibile aprire il file fasta %s\nErrore: %s\n", path, strerror(errno));
-  }
-  available_threads[*identity_in_arrays] = 1;
-  files_to_process[*identity_in_arrays].deleted = 1;
-  } while(1);
 }
 
 /*
@@ -3499,6 +3515,7 @@ void test_process_file() {
   communicate_max_fact_length(0);
   fact_choice = 1;
   test_activate_process_file_log = 1;
+  running = 0;
 
   pthread_attr_init(&att);
   printf("thread should be in wait mode now\n");
@@ -3508,6 +3525,8 @@ void test_process_file() {
   printf("thread should be running\n");
   files_to_process[0].deleted = 0;
   sleep(1);
+  if (running)
+    printf("running\n");
   printf("thread should be running at first an thad exiting\n");
   files_to_process[0].deleted = 0;
   end_of_processing = 1;  
