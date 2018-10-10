@@ -122,8 +122,8 @@ stampa le statistiche
 
 int main() {
 
-  //do_unit_testing();
-  //do_integration_testing();
+ // do_unit_testing();
+ // do_integration_testing();
   /*Catching input from the user*/
 
   printf("Benvenuto nel programma sequenziale Spire\n\n");
@@ -347,7 +347,7 @@ void process_fasta(struct dirent *file_description, char *path) {
           fprintf(factorization_file, "%s\n%s\n", header, result1);
           result2 = create_fingerprint(result1, kfingerprint_file, header);
           fprintf(fingerprint_file, "%s %s\n", header, result2);
-          fprintf(oneformat_file, "%s %c %s %c %s\n", header, '$', result2, '$', result1); 
+          fprintf(oneformat_file, "%s %c %s %c %s\n", header, '$', result2, '$', result1);
         /*  header_read_beck = header;
           current_header_size_beckup = current_header_size; */
         }
@@ -364,6 +364,13 @@ void process_fasta(struct dirent *file_description, char *path) {
       printf("Non è stato possibile aprire il file fasta %s\nErrore: %s\n", file_description->d_name, strerror(errno));
     }
   }
+}
+
+/*
+  Thread that perform all the factorization and fingerprint calculus operations on a signle file
+*/
+void *process_file(void* arg) {
+
 }
 
 /*
