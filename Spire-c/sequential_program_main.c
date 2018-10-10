@@ -51,7 +51,7 @@ int window_dimension;
 
 time_t time_spent_to_read_file = 0;
 time_t time_spent_to_write_in_file = 0;
-
+FILE *log_file = NULL;
 
 /*necessary to set the dimension of the string returned by list_to_string (efficiency reasons)*/
 int get_number_of_factors();
@@ -169,6 +169,9 @@ int main() {
 
   m = difftime(time(NULL), now);
   printf("tempo totale in secondi: %ld\n",m);
+
+  if (log_file != NULL)
+    fclose(log_file);
   return 0;
 }
 
@@ -296,6 +299,15 @@ void process_all_fasta_files(struct dirent *subdirectory_description, char* curr
   }
 }
 
+void print_error(const char *message, const char *value) {
+  
+  if (log_file == NULL) {
+    log_file = fopen("log_file.txt", "w");
+  }
+
+  if (log_file != NULL)
+    fprintf(log_file, "%s %s\n", message, value);
+}
 
 /*If the file descripted is a fasta file, factorization, fingerprint, kfingerprint and the one format of the first three
   will be created and saved in the same directory containing the file to be processed
@@ -341,9 +353,32 @@ void process_fasta(struct dirent *file_description, char *path) {
       }
       /*Processing of fasta file*/
       if (fasta_file != NULL) {
-        while ( (header = safe_fgets(header, &current_header_size, fasta_file)) != NULL ) {
+next:   while ( (header = safe_fgets(header, &current_header_size, fasta_file)) != NULL ) {
           genom = safe_fgets(genom, &current_genom_size, fasta_file);
-          result1 = apply_factorization(genom);
+
+          if (genom == NULL) {
+            printf("got null\n");
+            print_error("Incorrect read genom for", header);
+            goto next;
+          } else {
+            int error = 0, i;
+            for(i = 0; i < current_genom_size; i++) {
+              switch(genom[i]) {
+                printf("%c\n", genom[i]);
+                case 'A': break;
+                case 'G': break;
+                case 'T': break;
+                case 'C': break;
+                case '\0': goto after_cycle;
+                default: error = 1;
+              }
+              if(error == 1) {
+                print_error("Incorrect read genom for", header);
+                goto next;
+              }
+            }
+          }
+after_cycle: result1 = apply_factorization(genom);
           fprintf(factorization_file, "%s\n%s\n", header, result1);
           result2 = create_fingerprint(result1, kfingerprint_file, header);
           fprintf(fingerprint_file, "%s %s\n", header, result2);
@@ -361,7 +396,7 @@ void process_fasta(struct dirent *file_description, char *path) {
       printf("%s processed\n", path);
     }
     else {
-      printf("Non è stato possibile aprire il file fasta %s\nErrore: %s\n", file_description->d_name, strerror(errno));
+      print_error("Impossible to open file ", file_description->d_name);
     }
   }
 }
