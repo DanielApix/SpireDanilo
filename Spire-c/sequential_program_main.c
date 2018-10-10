@@ -97,11 +97,8 @@ void test_process_fasta();
 void do_integration_testing();
 
 /* Struttura generale del progamma
-
-int file_aperti
-
-apri_in_scrittura(char* filename)
-
+avvia_unit_test()  //può essere evitato
+avvia_integration_test()  //può essere evitato
 
 Chiedi input dall'utente
 Per ogni sottodirectory nella root
@@ -115,20 +112,18 @@ Per ogni sottodirectory nella root
       apri in scrittura("results")
       apri in scrittura("fingerprint")
       apri in scrittura("k-fingerprint")
+      apri in scrittura("oneformat");
       per ogni read
-        se è una read valida
-          char* result = processa_e_salva_nel_file(read, processa_read, file_fattorizzazione)
-          processa_e_salva_nel_file(result, processa_fingerprint, file_fingerprint)
-          read = processa_e_salva_nel_file(read, processa_read, file_kfingerprint)
-        altrimenti
-          esci dal ciclo
+          char* result = processa_e_salva_nel_file(read, fattorizza_read, file_fattorizzazione)
+          processa_e_salva_nel_file(result, crea_fingerprint, file_fingerprint)  //causa la creazione di k-fingerprint
+          crea_one_format_con_dati_precedenti();
 stampa le statistiche
 */
 
 int main() {
 
-  do_unit_testing();
-  do_integration_testing();
+  //do_unit_testing();
+  //do_integration_testing();
   /*Catching input from the user*/
 
   printf("Benvenuto nel programma sequenziale Spire\n\n");
