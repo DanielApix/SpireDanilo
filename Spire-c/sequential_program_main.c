@@ -360,7 +360,6 @@ void process_fasta(struct dirent *file_description, char *path) {
         }
         i = (i + 1) % PROCESSORS_NUMBER;
       }
-      files_to_process[i].directory_path[strlen(path) - strlen(file_description->d_name) - 1] = '\0';
       strncpy(files_to_process[i].directory_path, path, strlen(path) - strlen(file_description->d_name) - 1);
       strcpy(files_to_process[i].filename, file_description->d_name);  //useful cause sometimes file_description->d_name strangely changes in opening files
       strcpy(fasta_path, path);
