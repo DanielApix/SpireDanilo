@@ -140,8 +140,8 @@ stampa le statistiche
 
 int main() {
 
-//  do_unit_testing();
-//  do_integration_testing();
+  //do_unit_testing();
+  //do_integration_testing();
   /*Catching input from the user*/
 
   printf("Benvenuto nel programma sequenziale Spire\n\n");
@@ -167,13 +167,7 @@ int main() {
     printf("Fornisca dimensione massima di ciascun fattore\n");
     scanf("%d", &max_fact_length);
   }
-/*
-  fact_choice = 3;
-  strcpy(root_path, "/home/danilo/Scrivania/example-c");
-  window_dimension = 4;
-  max_fact_length = 30;
-  communicate_max_fact_length(max_fact_length);
-*/
+
   communicate_max_fact_length(max_fact_length);
   printf("fornisca il numero di elementi per ciascuna finestra per le k-fingerprint\n");
   scanf("%d", &window_dimension);
@@ -199,19 +193,13 @@ int main() {
 
   for_each_element_in(root_path, process_all_fasta_files);
   end_of_processing = 1;
-/*  for (i = 0; i < PROCESSORS_NUMBER; i++) 
-    pthread_join(thread_ids[i], NULL);
-*/
+
   int threads_have_done;
   while (!threads_have_done) {
-    threads_have_done = 0;
+    threads_have_done = 1;
     for (i = 0; i < PROCESSORS_NUMBER; i++)
-      threads_have_done = threads_have_done | !available_threads[i];  //if at least one thread hasn't finished, continue waiting
+      threads_have_done = threads_have_done && available_threads[i];  //if at least one thread hasn't finished, continue waiting
   }
-
-  end_of_processing = 1;
-  for (i = 0; i < PROCESSORS_NUMBER; i++) 
-    pthread_join(thread_ids[i], NULL);
 
   print_statistics();
 
@@ -967,7 +955,10 @@ void test_foreach_element_in() {
   strcat(path_test, "/");
   strcat(path_test, "directory-test");
 
-  file = opendir("/home/danilo/Scrivania/Spire-c/directory-test/directory1");
+  char subdir_path[strlen(path_test) + strlen("directory1") + 1];
+  strcpy(subdir_path, path_test);
+  strcat(subdir_path, "/directory1");
+  file = opendir(subdir_path);
   if (file == NULL) {
     printf("for_each_element test cannot be completed cause created directory1 cannot be open\n");
     exit(1);
