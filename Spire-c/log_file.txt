@@ -1,0 +1,4 @@
+Impossible to open file  test-kfingerprint
+Impossible to open file  test-factorization
+Impossible to open file  test-oneformat
+Impossible to open file  test-fingerprint
