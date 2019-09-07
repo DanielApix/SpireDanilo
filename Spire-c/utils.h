@@ -7,12 +7,7 @@ typedef struct node {
     char *factor;
     struct node *next;
 } node_t;
-/*
-typedef struct node_th {
-	pthread_t tid;
-	struct node_th *next;
-} node_thread;
-*/
+
 typedef struct param {
 	char *w;
 	char *list_alphabet;
