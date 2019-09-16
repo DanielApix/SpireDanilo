@@ -1,0 +1,1 @@
+gcc Spire-c/sequential_program_main.c Spire-c/factorizations.c Spire-c/utils.c Spire-c_test/test.c -o Spire-c_test/test -Wall

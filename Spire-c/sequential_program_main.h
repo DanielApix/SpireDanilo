@@ -22,6 +22,7 @@ void communicate_max_fact_length(int c);
 void for_each_element_in(char* directory_path,  void (*apply_function) (struct dirent *, char *));
 void print_statistics();
 void process_all_fasta_files(struct dirent *subdirectory_description, char* current_path);
+char* safe_fgets(char* buffer, int *current_size, FILE *stream);
 
 #endif
 

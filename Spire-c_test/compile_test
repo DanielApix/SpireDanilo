@@ -1,0 +1,1 @@
+gcc  /home/danilo/Scrivania/SpireDanilo/Spire-c/sequential_program_main.c /home/danilo/Scrivania/SpireDanilo/Spire-c/factorizations.c /home/danilo/Scrivania/SpireDanilo/Spire-c/utils.c /home/danilo/Scrivania/SpireDanilo/Spire-c_test/test.c /home/danilo/Scrivania/SpireDanilo/Spire-c_test/run_test.c /home/danilo/Scrivania/SpireDanilo/Spire-c_test/test_safe_fgets.c -o test -Wall

@@ -1,16 +1,4 @@
 #include "sequential_program_main.h"
-#include <stdio.h>
-#include <string.h>
-#include <dirent.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <time.h>
-#include <assert.h>   //the last 4 are used for testing
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <pthread.h>
-#include <sys/wait.h>
 
 char *inputString(FILE* fp, size_t size, char ending_character);
 

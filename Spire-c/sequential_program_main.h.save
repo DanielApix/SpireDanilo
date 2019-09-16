@@ -1,2 +1,0 @@
-gcc sequential_program_main.c factorizations.c utils.c -o spire -Wall
-
